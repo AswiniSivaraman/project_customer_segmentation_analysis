@@ -1,1 +1,1 @@
-# project_customer_segmentation_analysis
+# customer segmentation analysis
