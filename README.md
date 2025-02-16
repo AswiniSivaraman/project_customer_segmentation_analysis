@@ -1,1 +1,1 @@
-# customer segmentation analysis
+# clickstream customer segmentation analysis
