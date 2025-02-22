@@ -1,0 +1,8 @@
+pandas
+numpy
+scikit-learn
+zenml
+zenml["server"]
+imbalanced-learn
+xgboost
+scipy
