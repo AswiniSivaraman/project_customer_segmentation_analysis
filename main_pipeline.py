@@ -29,15 +29,15 @@ def run_main_pipeline(train_data, test_data):
             mlflow.log_param("best_regression_model", best_regression_model)
             print(regression_metrics)
 
-            # logging.info("Starting Classification Pipeline...")
-            # best_classification_model, classification_metrics = classification_pipeline(train_data, test_data)
-            # mlflow.log_param("best_classification_model", best_classification_model)
-            # print(classification_metrics)
+            logging.info("Starting Classification Pipeline...")
+            best_classification_model, classification_metrics = classification_pipeline(train_data, test_data)
+            mlflow.log_param("best_classification_model", best_classification_model)
+            print(classification_metrics)
 
-            # logging.info("Starting Clustering Pipeline...")
-            # best_clustering_model, clustering_metrics = clustering_pipeline(train_data, test_data)
-            # mlflow.log_param("best_clustering_model", best_clustering_model)
-            # print(clustering_metrics)
+            logging.info("Starting Clustering Pipeline...")
+            best_clustering_model, clustering_metrics = clustering_pipeline(train_data, test_data)
+            mlflow.log_param("best_clustering_model", best_clustering_model)
+            print(clustering_metrics)
 
             end_time = time.time()
             execution_time = round(end_time - start_time, 2)
@@ -47,10 +47,10 @@ def run_main_pipeline(train_data, test_data):
 
             logging.info(f"Best Regression Model: {best_regression_model}")
             logging.info(f"Best Regression Model's Metrics: {regression_metrics}")
-            # logging.info(f"Best Classification Model: {best_classification_model}")
-            # logging.info(f"Best Classification Model's Metrics: {classification_metrics}")
-            # logging.info(f"Best Clustering Model: {best_clustering_model}")
-            # logging.info(f"Best Clustering Model's Metrics: {clustering_metrics}")
+            logging.info(f"Best Classification Model: {best_classification_model}")
+            logging.info(f"Best Classification Model's Metrics: {classification_metrics}")
+            logging.info(f"Best Clustering Model: {best_clustering_model}")
+            logging.info(f"Best Clustering Model's Metrics: {clustering_metrics}")
 
     except Exception as e:
         logging.error(f'Error occured when running the main pipeline')
