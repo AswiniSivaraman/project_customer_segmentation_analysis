@@ -1,7 +1,7 @@
 import pandas as pd
 import logging
 from zenml import step
-from src.model_training import train_regression_model, train_classfication_mode, train_clustering_mode
+from src.model_training import train_regression_model, train_classification_mode, train_clustering_mode
 import mlflow
 
 @step
@@ -52,7 +52,7 @@ def train_classification(X_train: pd.DataFrame, y_train: pd.Series) -> dict:
     try:
         with mlflow.start_run(run_name="Step_Train_Classification"):
             logging.info("Started Training Classification Models...")
-            model_paths = train_classfication_mode(X_train, y_train)
+            model_paths = train_classification_mode(X_train, y_train)
 
             # Log total models trained
             mlflow.log_param("total_models_trained", len(model_paths))

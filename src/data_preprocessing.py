@@ -27,6 +27,7 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
         # Drop the unnecessary columns
         cols_to_drop = ["year"]
         df = df.drop(cols_to_drop, axis=1)
+        print('Columns dropped:', cols_to_drop)
 
         logging.info(f'Cleaning the data by removing the null, duplicate values and dropping the unnecessary columns')
         return df.dropna().drop_duplicates()
@@ -85,34 +86,33 @@ def store_cleaned_data(df: pd.DataFrame, file_path: str) -> None:
     
 
 
-def check_for_outlier(df, column):
+def check_for_outlier(df, columns=None):
     """
-    Check for outliers in the numerical columns of the dataframe and return the dataframe contains outliers count, lower bound, upper bound, min and max values
+    Check for outliers in the numerical columns of the dataframe and return a dataframe containing outliers count, lower bound, upper bound, min and max values.
 
     Args:
     df --> pandas dataframe
-    column --> column name to check for outliers
+    columns (optional) --> list of column names to check for outliers. If None, checks all numerical columns.
 
     Returns:
     pandas dataframe
-
     """
     try:
         logging.info(f'Checking for outliers in the numerical columns of the dataframe')
         numerical_cols = df.select_dtypes(include=['int64', 'float64']).columns
         outlier_df = []
+        if columns:  # If a list of specific columns is provided
+            numerical_cols = columns
         for col in numerical_cols:
-    
-            Q1 = df[column].quantile(0.25)
-            Q3 = df[column].quantile(0.75)
+            Q1 = df[col].quantile(0.25)
+            Q3 = df[col].quantile(0.75)
             IQR = Q3 - Q1
             lower_bound = Q1 - 1.5 * IQR
             upper_bound = Q3 + 1.5 * IQR
-            outliers = df[(df[column] < lower_bound) | (df[column] > upper_bound)]
-            outlier_df.append({'col' : col, 'outliers_count' : len(outliers), 'lower bound':lower_bound, 'upper bound': upper_bound,'min value' : df[col].min(), 'max_value' : df[col].max()})
-                
-        return(pd.DataFrame(outlier_df))
+            outliers = df[(df[col] < lower_bound) | (df[col] > upper_bound)]
+            outlier_df.append({'col': col, 'outliers_count': len(outliers), 'lower bound': lower_bound, 'upper bound': upper_bound, 'min value': df[col].min(), 'max_value': df[col].max()})
+        return pd.DataFrame(outlier_df)
     except Exception as e:
-        logging.error(f'Error occured when checking for outliers --> : {e}')
-        logging.exception('Full Exception Traceback:')    
+        logging.error(f'Error occurred when checking for outliers --> : {e}')
+        logging.exception('Full Exception Traceback:')
         raise e

@@ -75,7 +75,7 @@ classification_type_models = {
     "XGBoostClassifier": XGBClassifier(n_estimators=100, learning_rate=0.1, use_label_encoder=False, eval_metric="logloss", random_state=42)
 }
 
-def train_classfication_mode(X_train: pd.DataFrame, y_train: pd.Series):
+def train_classification_mode(X_train: pd.DataFrame, y_train: pd.Series):
     """
     Trains multiple classification models using the dictionary `classification_type_models`.
     

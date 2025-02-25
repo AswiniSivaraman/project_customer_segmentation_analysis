@@ -1,12 +1,11 @@
 import pandas as pd
 import logging
 from zenml import step
-from zenml import step, ArtifactConfig
-from src.data_loading import load_train_data,load_test_data
-from typing_extensions import Annotated
+from zenml.utils import secret_utils
+from src.data_loading import load_train_data, load_test_data
 
 @step
-def ingest_train_data(path: str) -> Annotated[pd.DataFrame, ArtifactConfig(name="train_data")]:
+def ingest_train_data(path: str) -> pd.DataFrame: 
     """
     ZenML step to load data from a given file path.
 
@@ -19,7 +18,6 @@ def ingest_train_data(path: str) -> Annotated[pd.DataFrame, ArtifactConfig(name=
     try:
         print('I am in ingest_data.py file in steps')
         logging.info(f'Ingesting data from: {path}')
-
         df = load_train_data(path)
         
         logging.info(f'Data ingestion successful: {df.shape[0]} rows, {df.shape[1]} columns.')
@@ -32,7 +30,7 @@ def ingest_train_data(path: str) -> Annotated[pd.DataFrame, ArtifactConfig(name=
 
 
 @step
-def ingest_test_data(path: str) -> Annotated[pd.DataFrame, ArtifactConfig(name="test_data")]:
+def ingest_test_data(path: str) -> pd.DataFrame: 
     """
     ZenML step to load data from a given file path.
 
@@ -45,7 +43,6 @@ def ingest_test_data(path: str) -> Annotated[pd.DataFrame, ArtifactConfig(name="
     try:
         print('I am in ingest_data.py file in steps')
         logging.info(f'Ingesting data from: {path}')
-
         df = load_test_data(path)
         
         logging.info(f'Data ingestion successful: {df.shape[0]} rows, {df.shape[1]} columns.')

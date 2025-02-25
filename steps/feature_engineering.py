@@ -50,7 +50,7 @@ def apply_feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
         logging.info("Session-based feature `max_page_reached` created.")
         print("Session-based feature `max_page_reached` created.")
 
-        logging.info("Feature engineering complete.")
+        logging.info("Feature engineering completed.")
         return df
 
     except Exception as e:
