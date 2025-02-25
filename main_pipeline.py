@@ -1,21 +1,17 @@
 import logging
+import mlflow
+import time
+from zenml.client import Client
 from pipelines.classification_pipeline import classification_pipeline
 from pipelines.regression_pipeline import regression_pipeline
 from pipelines.clustering_pipeline import clustering_pipeline
-from zenml.client import Client
-import mlflow
-import time
-
-# train_data = "data/train_data.csv"
-# test_data = "data/test_data.csv"
+from utils.get_result import fetch_best_model_outputs 
 
 def run_main_pipeline(train_data, test_data):
     """
     Runs classification, regression, and clustering pipelines sequentially with MLflow tracking.
-
     """
     try:
-
         # Initialize MLflow Experiment Tracking
         experiment_tracker = Client().active_stack.experiment_tracker
         if experiment_tracker:
@@ -24,37 +20,61 @@ def run_main_pipeline(train_data, test_data):
         with mlflow.start_run(run_name="Main_Pipeline_Run"):
             start_time = time.time()
 
+            # Run Regression Pipeline
             logging.info("Starting Regression Pipeline...")
-            best_regression_model, regression_metrics = regression_pipeline(train_data, test_data)
-            mlflow.log_param("best_regression_model", best_regression_model)
-            print(regression_metrics)
+            regression_pipeline(train_data, test_data)
 
-            logging.info("Starting Classification Pipeline...")
-            best_classification_model, classification_metrics = classification_pipeline(train_data, test_data)
-            mlflow.log_param("best_classification_model", best_classification_model)
-            print(classification_metrics)
+            # # Fetch Regression Model & Metrics
+            # best_regression_model, regression_metrics = fetch_best_model_outputs("regression_pipeline", "select_best_regression_model")
+            # if best_regression_model:
+            #     mlflow.log_param("best_regression_model", str(best_regression_model))
+            #     mlflow.log_metrics(regression_metrics)
 
-            logging.info("Starting Clustering Pipeline...")
-            best_clustering_model, clustering_metrics = clustering_pipeline(train_data, test_data)
-            mlflow.log_param("best_clustering_model", best_clustering_model)
-            print(clustering_metrics)
+            #     print(f"Best Regression Model: {best_regression_model}")
+            #     print(f"Regression Metrics: {regression_metrics}")
+            # else:
+            #     print("No successful regression pipeline run found!")
 
-            end_time = time.time()
-            execution_time = round(end_time - start_time, 2)
+            # # Run Classification Pipeline
+            # logging.info("Starting Classification Pipeline...")
+            # classification_pipeline(train_data, test_data)
 
-            # Log Pipeline Execution Time
-            mlflow.log_metric("pipeline_execution_time", execution_time)
+            # # Fetch Classification Model & Metrics
+            # best_classification_model, classification_metrics = fetch_best_model_outputs("classification_pipeline", "select_best_classification_model")
+            # if best_classification_model:
+            #     mlflow.log_param("best_classification_model", str(best_classification_model))
+            #     mlflow.log_metrics(classification_metrics)
 
-            logging.info(f"Best Regression Model: {best_regression_model}")
-            logging.info(f"Best Regression Model's Metrics: {regression_metrics}")
-            logging.info(f"Best Classification Model: {best_classification_model}")
-            logging.info(f"Best Classification Model's Metrics: {classification_metrics}")
-            logging.info(f"Best Clustering Model: {best_clustering_model}")
-            logging.info(f"Best Clustering Model's Metrics: {clustering_metrics}")
+            #     print(f"Best Classification Model: {best_classification_model}")
+            #     print(f"Classification Metrics: {classification_metrics}")
+            # else:
+            #     print("No successful classification pipeline run found!")
+
+            # # Run Clustering Pipeline
+            # logging.info("Starting Clustering Pipeline...")
+            # clustering_pipeline(train_data, test_data)
+
+            # # Fetch Clustering Model & Metrics
+            # best_clustering_model, clustering_metrics = fetch_best_model_outputs("clustering_pipeline", "select_best_clustering_model")
+            # if best_clustering_model:
+            #     mlflow.log_param("best_clustering_model", str(best_clustering_model))
+            #     mlflow.log_metrics(clustering_metrics)
+
+            #     print(f"Best Clustering Model: {best_clustering_model}")
+            #     print(f"Clustering Metrics: {clustering_metrics}")
+            # else:
+            #     print("No successful clustering pipeline run found!")
+
+            # # Log Pipeline Execution Time
+            # end_time = time.time()
+            # execution_time = round(end_time - start_time, 2)
+            # mlflow.log_metric("pipeline_execution_time", execution_time)
+
+            # logging.info(f"Pipeline Execution Time: {execution_time} seconds")
 
     except Exception as e:
-        logging.error(f'Error occured when running the main pipeline')
-        logging.exception('Full Exception Traceback:')
+        logging.error("Error occurred when running the main pipeline")
+        logging.exception("Full Exception Traceback:")
         raise e
 
 if __name__ == "__main__":
