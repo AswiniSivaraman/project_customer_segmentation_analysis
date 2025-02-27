@@ -16,7 +16,7 @@ def ingest_train_data(path: str) -> pd.DataFrame:
         pd.DataFrame: Loaded dataset.
     """
     try:
-        print('I am in ingest_data.py file in steps')
+        print('I am in ingest_data.py train file in steps')
         logging.info(f'Ingesting data from: {path}')
         df = load_train_data(path)
         
@@ -41,7 +41,7 @@ def ingest_test_data(path: str) -> pd.DataFrame:
         pd.DataFrame: Loaded dataset.
     """
     try:
-        print('I am in ingest_data.py file in steps')
+        print('I am in ingest_data.py test file in steps')
         logging.info(f'Ingesting data from: {path}')
         df = load_test_data(path)
         

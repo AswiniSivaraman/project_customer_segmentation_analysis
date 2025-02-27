@@ -4,8 +4,9 @@ from zenml import step
 from utils.data_transformation import apply_standard_scaling, handle_imbalanced_data
 from typing import Tuple
 
+
 @step
-def scale_features(train_df: pd.DataFrame, test_df: pd.DataFrame, numerical_cols: list) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def scale_features(train_df: pd.DataFrame, test_df: pd.DataFrame, numerical_cols: list, target_column: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     ZenML step to apply Standard Scaling on both train & test datasets using train data to fit the scaler.
 
@@ -13,19 +14,20 @@ def scale_features(train_df: pd.DataFrame, test_df: pd.DataFrame, numerical_cols
         train_df (pd.DataFrame): The training dataset.
         test_df (pd.DataFrame): The test dataset.
         numerical_cols (list): List of numerical columns to scale.
+        target_column (str): The target column (excluded from scaling).
 
     Returns:
-        Tuple[pd.DataFrame, pd.DataFrame]: Scaled training and test datasets.
+        Tuple[pd.DataFrame, pd.DataFrame]: Scaled training and test datasets (target remains unchanged).
     """
     try:
         logging.info("Starting Standard Scaling process...")
-        train_scaled, test_scaled = apply_standard_scaling(train_df, test_df, numerical_cols)
+        train_scaled, test_scaled = apply_standard_scaling(train_df, test_df, numerical_cols, target_column)
         logging.info("Standard Scaling successfully applied on train & test data.")
         return train_scaled, test_scaled
 
     except Exception as e:
-        logging.error(f"Error in feature scaling using StandardScalar step: {e}")
-        logging.exception('Full Exception Traceback:')
+        logging.error(f"Error in feature scaling using StandardScaler step: {e}")
+        logging.exception("Full Exception Traceback:")
         raise e
 
 

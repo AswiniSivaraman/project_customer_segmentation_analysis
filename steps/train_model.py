@@ -5,7 +5,7 @@ from src.model_training import train_regression_model, train_classification_mode
 import mlflow
 
 @step
-def train_regression(X_train: pd.DataFrame, y_train: pd.Series) -> dict:
+def train_regression(df: pd.DataFrame, target_col: str) -> dict:
     """
     ZenML Step to train multiple regression models.
 
@@ -19,7 +19,19 @@ def train_regression(X_train: pd.DataFrame, y_train: pd.Series) -> dict:
     try:
         with mlflow.start_run(run_name="Step_Train_Regression"):
             logging.info("Started Training Regression Models...")
+
+            assert target_col in df.columns, f"Target column '{target_col}' not found in dataset"
+
+            logging.info(f" Started to split the Training and Testing data")
+            X_train = df.drop(columns=target_col)  # Drop target column from features
+            y_train = df[target_col]  # Target column
+            print(X_train.columns)
+            print(y_train.head(1))
+            logging.info(f"Training and Testing data splitted successfully: {X_train.shape}, {y_train.shape}")
+
+            logging.info(f"Started to train the models")
             model_paths = train_regression_model(X_train, y_train)
+            logging.info(f"Successfully trained the models")
 
             # Log total models trained
             mlflow.log_param("total_models_trained", len(model_paths))

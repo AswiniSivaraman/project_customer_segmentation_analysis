@@ -3,9 +3,10 @@ import logging
 from zenml import step
 from steps.clean_data_steps import clean_data_step, encode_data_step, check_outlier_step
 from steps.feature_engineering import apply_feature_engineering
+from typing import Tuple
 
 @step
-def preprocessing_data(df: pd.DataFrame, cat_columns: list, columns: list, save_path: str) -> pd.DataFrame:
+def preprocessing_data(df_train: pd.DataFrame, df_test: pd.DataFrame, cat_columns: list, columns: list, save_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     ZenML Step to preprocess the dataset:
     - Cleans the data.
@@ -13,35 +14,32 @@ def preprocessing_data(df: pd.DataFrame, cat_columns: list, columns: list, save_
     - Checks for outliers.
     
     Args:
-        df (pd.DataFrame): Raw dataset.
-        categorical_columns (list): List of categorical columns to encode.
+        df_train (pd.DataFrame): Raw training dataset.
+        df_test (pd.DataFrame): Raw testing dataset.
+        cat_columns (list): List of categorical columns to encode.
         save_path (str): Path to save encoded mappings.
-    
+
     Returns:
-        pd.DataFrame: Cleaned and preprocessed dataset.
+        Tuple[pd.DataFrame, pd.DataFrame]: Cleaned and preprocessed training and testing datasets.
     """
     try:
-        logging.info(f'Starting full data preprocessing.....')
+        logging.info("Starting full data preprocessing...")
 
         # Clean the data
-        df_cleaned = clean_data_step(df)
-        logging.info(f'Data cleaned: {df_cleaned.shape[0]} rows, {df_cleaned.shape[1]} columns.')
+        df_train_cleaned = clean_data_step(df_train)
+        df_test_cleaned = clean_data_step(df_test)
+        logging.info(f"Data cleaned: Train -> {df_train_cleaned.shape}, Test -> {df_test_cleaned.shape}")
 
         # Apply feature engineering
-        df_featured = apply_feature_engineering(df_cleaned)
-        logging.info(f"Feature engineering applied.")
-        logging.info(f"Featured data columns: {df_featured.columns}")
+        df_train_featured = apply_feature_engineering(df_train_cleaned)
+        df_test_featured = apply_feature_engineering(df_test_cleaned)
+        logging.info("Feature engineering applied.")
 
-        # Encode categorical features
-        df_encoded = encode_data_step(df_featured, cat_columns, save_path)
+        # Encode categorical features (Updated to handle train & test separately)
+        df_train_encoded, df_test_encoded = encode_data_step(df_train_featured, df_test_featured, cat_columns, save_path)
         logging.info(f"Categorical columns encoded: {columns}")
-        logging.info(f"Encoded data columns: {df_encoded.columns}")
 
-        # Check for outliers
-        outlier_report = check_outlier_step(df_encoded, columns)
-        logging.info(f"Outlier report generated:\n{outlier_report}")
-
-        return df_encoded
+        return df_train_encoded, df_test_encoded
         
     except Exception as e:
         logging.error(f"Error in full data preprocessing: {e}")

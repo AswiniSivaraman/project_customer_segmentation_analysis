@@ -3,6 +3,7 @@ import logging
 from src.data_preprocessing import clean_data, encode_data, check_for_outlier, store_cleaned_data
 from utils.encoding_values import get_pre_encoded_mappings, save_encoded_mappings
 from zenml import step
+from typing import Tuple
 
 @step
 def clean_data_step(df: pd.DataFrame) -> pd.DataFrame:
@@ -27,38 +28,37 @@ def clean_data_step(df: pd.DataFrame) -> pd.DataFrame:
     
 
 @step
-def encode_data_step(df: pd.DataFrame, categorical_columns: list, save_path: str) -> pd.DataFrame:
+def encode_data_step(df_train: pd.DataFrame, df_test: pd.DataFrame, categorical_columns: list, save_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
-    ZenML Step to encode categorical features.
+    ZenML Step to encode categorical features for both train and test data.
     
     Args:
-        df (pd.DataFrame): Cleaned dataset.
+        df_train (pd.DataFrame): Training dataset.
+        df_test (pd.DataFrame): Testing dataset.
         categorical_columns (list): List of categorical columns to encode.
         save_path (str): Path to save encoded mappings.
-    
+
     Returns:
-        pd.DataFrame: Dataset with encoded categorical features.
+        Tuple[pd.DataFrame, pd.DataFrame]: Encoded training and test datasets.
     """
     try:
-        logging.info(f'Starting data encoding.....')
+        logging.info("Starting data encoding for train and test datasets...")
         encoding_mappings = {}
+
+        # Apply encoding to both train and test data
         for col in categorical_columns:
-            df, mapping = encode_data(df, col)
+            df_train, mapping = encode_data(df_train, col, is_train=True, save_path=save_path)  # Fit & Save Encoder
+            df_test, _ = encode_data(df_test, col, is_train=False, save_path=save_path)  # Load & Transform Test Data
             encoding_mappings[col] = mapping
+
         logging.info(f"Categorical columns encoded: {categorical_columns}")
 
-        pre_encoded_mappings = get_pre_encoded_mappings()
-        encoding_mappings.update(pre_encoded_mappings)
-        logging.info(f"Merged encoded mappings for both manually encoded & pre-encoded columns.")
+        return df_train, df_test
 
-        mappings_file_path = save_encoded_mappings(encoding_mappings, save_path)
-        logging.info(f"Encoded mappings saved at {mappings_file_path}")
-        
-        return df
     except Exception as e:
         logging.error(f"Error in encoding data: {e}")
         logging.exception("Full Exception Traceback:")
-        raise
+        raise e
 
 
 @step
