@@ -43,7 +43,7 @@ def encode_data_step(df_train: pd.DataFrame, df_test: pd.DataFrame, categorical_
     """
     try:
         logging.info("Starting data encoding for train and test datasets...")
-        encoding_mappings = {}
+        encoding_mappings = get_pre_encoded_mappings()
 
         # Apply encoding to both train and test data
         for col in categorical_columns:
@@ -51,6 +51,7 @@ def encode_data_step(df_train: pd.DataFrame, df_test: pd.DataFrame, categorical_
             df_test, _ = encode_data(df_test, col, is_train=False, save_path=save_path)  # Load & Transform Test Data
             encoding_mappings[col] = mapping
 
+        save_encoded_mappings(encoding_mappings, save_path)
         logging.info(f"Categorical columns encoded: {categorical_columns}")
 
         return df_train, df_test

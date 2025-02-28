@@ -8,7 +8,7 @@ from src.model_evaluation import (
 )
 
 @step
-def evaluate_regression_step(X_test: pd.DataFrame, y_test: pd.Series) -> pd.DataFrame:
+def evaluate_regression_step(df: pd.DataFrame, target_column: str, dependency: dict) -> pd.DataFrame:
     """
     ZenML Step to evaluate all trained regression models and return results as a DataFrame.
 
@@ -20,6 +20,8 @@ def evaluate_regression_step(X_test: pd.DataFrame, y_test: pd.Series) -> pd.Data
         pd.DataFrame: DataFrame containing MSE, MAE, and R² Score for each regression model.
     """
     try:
+        X_test = df.drop(columns=target_column)
+        y_test = df[target_column]
         logging.info("Starting regression model evaluation...")
         results = evaluate_regression_models(X_test, y_test)
 

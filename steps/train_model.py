@@ -25,8 +25,6 @@ def train_regression(df: pd.DataFrame, target_col: str) -> dict:
             logging.info(f" Started to split the Training and Testing data")
             X_train = df.drop(columns=target_col)  # Drop target column from features
             y_train = df[target_col]  # Target column
-            print(X_train.columns)
-            print(y_train.head(1))
             logging.info(f"Training and Testing data splitted successfully: {X_train.shape}, {y_train.shape}")
 
             logging.info(f"Started to train the models")
@@ -50,13 +48,13 @@ def train_regression(df: pd.DataFrame, target_col: str) -> dict:
 
 
 @step
-def train_classification(X_train: pd.DataFrame, y_train: pd.Series) -> dict:
+def train_classification(df: pd.DataFrame, target_col: str) -> dict:
     """
     ZenML Step to train multiple classification models.
 
     Args:
-        X_train (pd.DataFrame): Training features.
-        y_train (pd.Series): Target variable.
+        df (pd.DataFrame): Training dataset.
+        target_col (str): Target variable.
 
     Returns:
         dict: Paths of saved classification models.
@@ -64,7 +62,19 @@ def train_classification(X_train: pd.DataFrame, y_train: pd.Series) -> dict:
     try:
         with mlflow.start_run(run_name="Step_Train_Classification"):
             logging.info("Started Training Classification Models...")
+
+            assert target_col in df.columns, f"Target column '{target_col}' not found in dataset"
+
+            logging.info("Started to split the Training and Testing data")
+            X_train = df.drop(columns=target_col)  # Drop target column from features
+            y_train = df[target_col]  # Target column
+            print(X_train.columns)
+            print(y_train.head(1))
+            logging.info(f"Training and Testing data splitted successfully: {X_train.shape}, {y_train.shape}")
+
+            logging.info("Started to train the models")
             model_paths = train_classification_mode(X_train, y_train)
+            logging.info("Successfully trained the models")
 
             # Log total models trained
             mlflow.log_param("total_models_trained", len(model_paths))
@@ -83,12 +93,12 @@ def train_classification(X_train: pd.DataFrame, y_train: pd.Series) -> dict:
 
 
 @step
-def train_clustering(X_train: pd.DataFrame) -> dict:
+def train_clustering(df: pd.DataFrame) -> dict:
     """
     ZenML Step to train multiple clustering models.
 
     Args:
-        X_train (pd.DataFrame): Training features (no target needed for clustering).
+        df (pd.DataFrame): Training dataset.
 
     Returns:
         dict: Paths of saved clustering models.
@@ -96,8 +106,16 @@ def train_clustering(X_train: pd.DataFrame) -> dict:
     try:
         with mlflow.start_run(run_name="Step_Train_Clustering"):
             logging.info("Started Training Clustering Models...")
-            model_paths = train_clustering_mode(X_train, None)  # No target column needed for clustering
-            
+
+            logging.info("Started to prepare the Training data")
+            X_train = df  # No target column for clustering
+            print(X_train.columns)
+            logging.info(f"Training data prepared successfully: {X_train.shape}")
+
+            logging.info("Started to train the models")
+            model_paths = train_clustering_mode(X_train, None)
+            logging.info("Successfully trained the models")
+
             # Log total models trained
             mlflow.log_param("total_models_trained", len(model_paths))
 
