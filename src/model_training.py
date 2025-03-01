@@ -17,20 +17,6 @@ from typing import Tuple
 from utils.helper_func import train_any_model
 import mlflow
 
-regression_type_models = {
-    "LinearRegression": LinearRegression(),
-    "PolynomialRegression": make_pipeline(PolynomialFeatures(degree=2), LinearRegression()),
-    "RidgeRegression": Ridge(alpha=1.0),
-    "LassoRegression": Lasso(alpha=0.1),
-    "ElasticNet": ElasticNet(alpha=0.1, l1_ratio=0.5),
-    "SVR": SVR(kernel="rbf"),
-    "DecisionTreeRegressor": DecisionTreeRegressor(random_state=42),
-    "RandomForestRegressor": RandomForestRegressor(n_estimators=100, random_state=42),
-    "GradientBoostingRegressor": GradientBoostingRegressor(n_estimators=100, random_state=42),
-    "XGBoostRegressor": XGBRegressor(n_estimators=100, learning_rate=0.1, random_state=42),
-    "MLPRegressor": MLPRegressor(hidden_layer_sizes=(100,), max_iter=500, random_state=42),
-}
-
 def train_regression_model(X_train: pd.DataFrame, y_train: pd.Series):
     """
     Trains multiple regression models using the dictionary `regression_type_models`.
@@ -42,9 +28,31 @@ def train_regression_model(X_train: pd.DataFrame, y_train: pd.Series):
     Returns:
         dict: Model names and their corresponding saved file paths.
     """
+
+    model = None
     try:
+        regression_type_models = {
+            "LinearRegression": LinearRegression(),
+            "PolynomialRegression": make_pipeline(PolynomialFeatures(degree=2), LinearRegression()),
+            "RidgeRegression": Ridge(alpha=1.0),
+            "LassoRegression": Lasso(alpha=0.1),
+            "ElasticNet": ElasticNet(alpha=0.1, l1_ratio=0.5),
+            "SVR": SVR(kernel="rbf"),
+            "DecisionTreeRegressor": DecisionTreeRegressor(random_state=42),
+            "RandomForestRegressor": RandomForestRegressor(n_estimators=100, random_state=42),
+            "GradientBoostingRegressor": GradientBoostingRegressor(n_estimators=100, random_state=42),
+            "XGBoostRegressor": XGBRegressor(n_estimators=100, learning_rate=0.1, random_state=42),
+            "MLPRegressor": MLPRegressor(hidden_layer_sizes=(100,), max_iter=500, random_state=42),
+        }
         model_paths = {}
+        print("i the path src/model_training.py") # remove later
+
+        if mlflow.active_run():
+            logging.info(f"Active MLflow run: {mlflow.active_run().info.run_id}")
+            mlflow.end_run()
+
         with mlflow.start_run(run_name="Train_Regression_Models"):
+            print("starts the loop")  # remove later
             for name, model in regression_type_models.items():
                 logging.info(f'training {name} model')
                 trained_reg_model, path = train_any_model(model, X_train, y_train, model_name=name, model_type="regression")
@@ -63,17 +71,7 @@ def train_regression_model(X_train: pd.DataFrame, y_train: pd.Series):
         raise e
 
 
-classification_type_models = {
-    "LogisticRegression": LogisticRegression(),
-    "SVC": SVC(kernel="rbf", probability=True),
-    "DecisionTreeClassifier": DecisionTreeClassifier(random_state=42),
-    "RandomForestClassifier": RandomForestClassifier(n_estimators=100, random_state=42),
-    "GradientBoostingClassifier": GradientBoostingClassifier(n_estimators=100, random_state=42),
-    "KNeighborsClassifier": KNeighborsClassifier(n_neighbors=5),
-    "GaussianNB": GaussianNB(),
-    "MLPClassifier": MLPClassifier(hidden_layer_sizes=(100,), max_iter=500, random_state=42),
-    "XGBoostClassifier": XGBClassifier(n_estimators=100, learning_rate=0.1, use_label_encoder=False, eval_metric="logloss", random_state=42)
-}
+
 
 def train_classification_mode(X_train: pd.DataFrame, y_train: pd.Series):
     """
@@ -87,7 +85,23 @@ def train_classification_mode(X_train: pd.DataFrame, y_train: pd.Series):
         dict: Model names and their corresponding saved file paths.
     """
     try:
+        classification_type_models = {
+            "LogisticRegression": LogisticRegression(),
+            "SVC": SVC(kernel="rbf", probability=True),
+            "DecisionTreeClassifier": DecisionTreeClassifier(random_state=42),
+            "RandomForestClassifier": RandomForestClassifier(n_estimators=100, random_state=42),
+            "GradientBoostingClassifier": GradientBoostingClassifier(n_estimators=100, random_state=42),
+            "KNeighborsClassifier": KNeighborsClassifier(n_neighbors=5),
+            "GaussianNB": GaussianNB(),
+            "MLPClassifier": MLPClassifier(hidden_layer_sizes=(100,), max_iter=500, random_state=42),
+            "XGBoostClassifier": XGBClassifier(n_estimators=100, learning_rate=0.1, use_label_encoder=False, eval_metric="logloss", random_state=42)
+        }
         model_paths = {}
+
+        if mlflow.active_run():
+            logging.info(f"Active MLflow run: {mlflow.active_run().info.run_id}")
+            mlflow.end_run()
+
         with mlflow.start_run(run_name="Train_Classification_Models"):
             for name, model in classification_type_models.items():
                 logging.info(f'training {name} model')
@@ -107,12 +121,6 @@ def train_classification_mode(X_train: pd.DataFrame, y_train: pd.Series):
         raise e
 
 
-clustering_type_models = {
-    "KMeans": KMeans(n_clusters=5, random_state=42),
-    "DBSCAN": DBSCAN(eps=0.5, min_samples=5),
-    "AgglomerativeClustering": AgglomerativeClustering(n_clusters=5),
-    "GaussianMixture": GaussianMixture(n_components=5, random_state=42)
-}
 
 def train_clustering_mode(X_train: pd.DataFrame, y_train: pd.Series):
     """
@@ -127,7 +135,18 @@ def train_clustering_mode(X_train: pd.DataFrame, y_train: pd.Series):
     """
 
     try:
+        clustering_type_models = {
+            "KMeans": KMeans(n_clusters=5, random_state=42),
+            "DBSCAN": DBSCAN(eps=0.5, min_samples=5),
+            "AgglomerativeClustering": AgglomerativeClustering(n_clusters=5),
+            "GaussianMixture": GaussianMixture(n_components=5, random_state=42)
+        }
         model_paths = {}
+
+        if mlflow.active_run():
+            logging.info(f"Active MLflow run: {mlflow.active_run().info.run_id}")
+            mlflow.end_run()
+            
         with mlflow.start_run(run_name="Train_Clustering_Models"):
             for name, model in clustering_type_models.items():
                 logging.info(f'training {name} model')

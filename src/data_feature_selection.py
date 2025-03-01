@@ -72,6 +72,7 @@ def feature_selection_classification(df:pd.DataFrame, continuous_cols:list, cate
 
         # Filter the results to get only the features with significance < 0.05
         significant_features1 = results_df[results_df["Significant (<0.05)"] == True]["Feature"].tolist()
+        significant_features1.append(target_col)
         return significant_features1
     
     except Exception as e:
@@ -124,6 +125,7 @@ def feature_selection_regression(df:pd.DataFrame,  continuous_cols:list, categor
 
         # Extract only significant features
         significant_features2 = results_df[results_df["Significant (<0.05)"] == True]["Feature"].tolist()
+        significant_features2.append(target_col)
 
         return significant_features2
 

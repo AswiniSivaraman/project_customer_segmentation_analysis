@@ -4,9 +4,10 @@ from typing import Tuple
 import mlflow
 import os
 
-def select_best_model(evaluation_df: pd.DataFrame, model_type: str) -> Tuple[str, pd.DataFrame]:
+def select_best_model(evaluation_df: pd.DataFrame, model_type: str) -> Tuple[str, dict]:
     """
-    Selects the best model from the evaluation DataFrame and returns its name along with its metrics.
+    Selects the best model from the evaluation DataFrame, logs it to MLflow,
+    and stores it in a CSV file inside 'models/best_models/' while ensuring unique model names.
 
     Args:
         evaluation_df (pd.DataFrame): DataFrame containing model evaluation results.
@@ -15,53 +16,89 @@ def select_best_model(evaluation_df: pd.DataFrame, model_type: str) -> Tuple[str
     Returns:
         tuple:
             - str: The best model name.
-            - pd.DataFrame: A single-row DataFrame with the best model's evaluation metrics.
+            - dict: A dictionary with the best model's evaluation metrics.
     """
     try:
+        # Define the correct path inside "models/best_models/"
+        best_models_dir = "models/best_models"
+        best_models_file = os.path.join(best_models_dir, "best_models_file.csv")
+
+        # Ensure the directory exists
+        os.makedirs(best_models_dir, exist_ok=True)
+
         logging.info(f"Selecting best model for {model_type}...")
 
         if evaluation_df.empty:
             logging.warning("Evaluation DataFrame is empty. No models to select from.")
             return None, None
 
+        # Ensure model_type is valid
+        valid_model_types = ["classification", "regression", "clustering"]
+        if model_type not in valid_model_types:
+            raise ValueError(f"Invalid model type '{model_type}'. Choose from {valid_model_types}.")
+
+        # Determine the best model based on evaluation metric
         if model_type == "classification":
-            # Select model with highest Accuracy
-            best_model = evaluation_df["Accuracy"].idxmax()
-        
+            best_model_index = evaluation_df["Accuracy"].idxmax()
         elif model_type == "regression":
-            # Select model with lowest Mean Squared Error (MSE)
-            best_model = evaluation_df["MSE"].idxmin()
-        
+            best_model_index = evaluation_df["MSE"].idxmin()  # Finds row index with lowest MSE
         elif model_type == "clustering":
-            # Select model with highest Silhouette Score
-            best_model = evaluation_df["Silhouette Score"].idxmax()
-        
+            best_model_index = evaluation_df["Silhouette Score"].idxmax()
+
+        # Retrieve the model name from the 'Model' column
+        best_model_name = evaluation_df.loc[best_model_index, "Model"]
+
+        # Convert best_model_name to string to avoid indexing issues
+        best_model_name = str(best_model_name)
+
+        # Get model's performance metrics as a dictionary
+        best_model_metrics = evaluation_df.loc[best_model_index].to_dict()
+
+        print(f"Model Type: {model_type}")
+        print(f"Best Model: {best_model_name}")
+        print(f"Best Model Metrics: {best_model_metrics}")
+
+        # Ensure the CSV file exists or create an empty DataFrame
+        if os.path.exists(best_models_file):
+            best_models_df = pd.read_csv(best_models_file)
         else:
-            raise ValueError("Invalid model type. Choose 'classification', 'regression', or 'clustering'.")
+            best_models_df = pd.DataFrame(columns=["Model Type", "Best Model"])
 
-        best_model_metrics = evaluation_df.loc[[best_model]]  # Extract its metrics
+        # Remove any previous entry of the same model type
+        best_models_df = best_models_df[best_models_df["Model Type"] != model_type]
 
-        # Save Best Model Path
-        best_model_path = os.path.join("models", f"best_models", f"{model_type}_{best_model}.pkl")
+        # Append the new best model while maintaining only 3 unique entries
+        new_entry = pd.DataFrame({"Model Type": [model_type], "Best Model": [best_model_name]})
+        best_models_df = pd.concat([best_models_df, new_entry], ignore_index=True)
 
-        # Log Best Model in MLflow
+        # Save the updated DataFrame back to the CSV file in 'models/best_models/'
+        best_models_df.to_csv(best_models_file, index=False)
+
+        logging.info(f"Best model saved in {best_models_file}")
+        print(f"Best model saved in {best_models_file}")
+
+        # Start an MLflow run to log the best model
         with mlflow.start_run(run_name=f"Best_{model_type}_Model"):
-            mlflow.log_param("best_model", best_model)
+            mlflow.log_param("best_model", best_model_name)  # Log best model name
             
-            # Log Model Metrics
+            # Log only numeric metrics
             for metric, value in best_model_metrics.items():
-                mlflow.log_metric(f"best_{metric}", value)
-            
-            # Log Best Model as Artifact
-            if os.path.exists(best_model_path):
-                mlflow.log_artifact(best_model_path)
-            else:
-                logging.warning(f"Model file not found: {best_model_path}")
+                if isinstance(value, (int, float)):
+                    logging.info(f"{metric}: {value}")
+                    mlflow.log_metric(f"best_{metric}", value)
+                else:
+                    logging.warning(f"Skipping non-numeric metric {metric}: {value}")
 
-        logging.info(f"Best {model_type} Model: {best_model}")
+            # Log the CSV file as an artifact
+            if os.path.exists(best_models_file):
+                mlflow.log_artifact(best_models_file)
+            else:
+                logging.warning(f"CSV file not found: {best_models_file}. It may not have been saved yet.")
+
+        logging.info(f"Best {model_type} Model: {best_model_name}")
         logging.info(f"Best Model Metrics:\n{best_model_metrics}")
 
-        return best_model, best_model_metrics
+        return best_model_name, best_model_metrics
 
     except Exception as e:
         logging.error(f"Error selecting best model: {e}")
