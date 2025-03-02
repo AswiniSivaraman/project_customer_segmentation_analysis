@@ -1,0 +1,4 @@
+Model Type,Best Model
+regression,RandomForestRegressor
+classification,DecisionTreeClassifier
+clustering,KMeans
