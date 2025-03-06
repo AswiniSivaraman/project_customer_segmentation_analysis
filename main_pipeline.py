@@ -12,38 +12,36 @@ def run_main_pipeline(train_data, test_data):
     Runs classification, regression, and clustering pipelines sequentially with MLflow tracking.
     """
     try:
-        # Initialize MLflow Experiment Tracking
-        experiment_tracker = Client().active_stack.experiment_tracker
-        if experiment_tracker:
-            logging.info(f"Using MLflow experiment tracker: {experiment_tracker.name}")
+        start_time = time.time()
 
-        with mlflow.start_run(run_name="Main_Pipeline_Run"):
-            start_time = time.time()
+        # Run Regression Pipeline
+        mlflow.set_experiment("Regression Experiment")
+        logging.info("Starting Regression Pipeline...")
+        regression_pipeline(train_data, test_data)
 
-            print(Client().active_stack.experiment_tracker.get_tracking_uri())
+        # Run Classification Pipeline
+        mlflow.set_experiment("Classification Experiment")
+        logging.info("Starting Classification Pipeline...")
+        classification_pipeline(train_data, test_data)
 
-            # Run Regression Pipeline
-            logging.info("Starting Regression Pipeline...")
-            regression_pipeline(train_data, test_data)
+        # # Run Clustering Pipeline
+        mlflow.set_experiment("Clustering Experiment")
+        logging.info("Starting Clustering Pipeline...")
+        clustering_pipeline(train_data, test_data)
 
-            # # Run Classification Pipeline
-            # logging.info("Starting Classification Pipeline...")
-            # classification_pipeline(train_data, test_data)
-
-            # # Run Clustering Pipeline
-            # logging.info("Starting Clustering Pipeline...")
-            # clustering_pipeline(train_data, test_data)
-
-            # # Log Pipeline Execution Time
-            # end_time = time.time()
-            # execution_time = round(end_time - start_time, 2)
-            # mlflow.log_metric("pipeline_execution_time", execution_time)
-            # logging.info(f"Pipeline Execution Time: {execution_time} seconds")
+        # Log Pipeline Execution Time
+        end_time = time.time()
+        execution_time = round(end_time - start_time, 2)
+        logging.info(f"Pipeline Execution Time: {execution_time} seconds")
 
     except Exception as e:
         logging.error("Error occurred when running the main pipeline")
         logging.exception("Full Exception Traceback:")
         raise e
+    
+    finally:
+        if mlflow.active_run():
+            mlflow.end_run()
 
 if __name__ == "__main__":
     train_data_df = "data/train_data.csv"

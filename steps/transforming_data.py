@@ -6,7 +6,7 @@ from typing import Tuple
 
 
 @step
-def scale_features(train_df: pd.DataFrame, test_df: pd.DataFrame, numerical_cols: list, target_column: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def scale_features(train_df: pd.DataFrame, test_df: pd.DataFrame, numerical_cols: list, target_column: str, is_target_there: bool) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     ZenML step to apply Standard Scaling on both train & test datasets using train data to fit the scaler.
 
@@ -21,7 +21,7 @@ def scale_features(train_df: pd.DataFrame, test_df: pd.DataFrame, numerical_cols
     """
     try:
         logging.info("Starting Standard Scaling process...")
-        train_scaled, test_scaled = apply_standard_scaling(train_df, test_df, numerical_cols, target_column)
+        train_scaled, test_scaled = apply_standard_scaling(train_df, test_df, numerical_cols, target_column, is_target_there)
         logging.info("Standard Scaling successfully applied on train & test data.")
         return train_scaled, test_scaled
 
@@ -48,6 +48,8 @@ def balance_train_data(train_df: pd.DataFrame, target_col: str, method: str = "s
         logging.info(f"Starting Data Balancing process using {method}...")
         X_train_balanced, y_train_balanced = handle_imbalanced_data(train_df, target_col)
         logging.info("Data balancing completed successfully.")
+        print("x_train_balance type", type(X_train_balanced))
+        print("y_test_balance type", type(y_train_balanced))
         return X_train_balanced, y_train_balanced
 
     except Exception as e:

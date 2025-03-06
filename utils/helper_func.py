@@ -33,8 +33,11 @@ def train_any_model(
     try:
         logging.info(f"Training {model_name}...")
 
-        # Start MLflow Run
-        with mlflow.start_run(run_name=f"{model_type}_{model_name}"):
+        if mlflow.active_run():
+            logging.info(f"Active MLflow run: {mlflow.active_run().info.run_id}")
+            mlflow.end_run()
+
+        with mlflow.start_run(run_name=f"Train_{model_name}"):
 
             # Train the model (handle clustering separately as it doesn't need y_train)
             if model_type == "clustering":
@@ -54,12 +57,10 @@ def train_any_model(
 
             logging.info(f"{model_name} successfully saved at: {model_filename}")
 
-            # Log Model Parameters
-            mlflow.log_param("model_type", model_type)
-            mlflow.log_param("model_name", model_name)
-
-            # Log Model Artifact (Saving Model to MLflow)
+            # Log parameters and artifacts
             mlflow.log_artifact(model_filename)
+            if hasattr(model, "get_params"):
+                mlflow.log_params(model.get_params())
 
             return model, model_filename
 
@@ -67,6 +68,11 @@ def train_any_model(
         logging.error(f"Error in training {model_name}.")
         logging.exception('Full Exception Traceback:')
         raise e
+    
+    finally:
+        if mlflow.active_run():
+            mlflow.end_run()
+       
 
 
 

@@ -80,14 +80,26 @@ def select_best_model(evaluation_df: pd.DataFrame, model_type: str) -> Tuple[str
         # Start an MLflow run to log the best model
         with mlflow.start_run(run_name=f"Best_{model_type}_Model"):
             mlflow.log_param("best_model", best_model_name)  # Log best model name
-            
-            # Log only numeric metrics
-            for metric, value in best_model_metrics.items():
-                if isinstance(value, (int, float)):
-                    logging.info(f"{metric}: {value}")
-                    mlflow.log_metric(f"best_{metric}", value)
-                else:
-                    logging.warning(f"Skipping non-numeric metric {metric}: {value}")
+
+            # Log appropriate metrics based on model type
+            if model_type == "regression":
+                regression_metrics = ["MSE", "MAE", "RMSE", "R2_Score"]
+                for metric in regression_metrics:
+                    if metric in best_model_metrics and isinstance(best_model_metrics[metric], (int, float)):
+                        mlflow.log_metric(metric, best_model_metrics[metric])
+
+            elif model_type == "classification":
+                classification_metrics = ["Accuracy", "Precision", "Recall", "F1 Score", "ROC AUC"]
+                for metric in classification_metrics:
+                    if metric in best_model_metrics and isinstance(best_model_metrics[metric], (int, float)):
+                        mlflow.log_metric(metric, best_model_metrics[metric])
+
+            elif model_type == "clustering":
+                clustering_metrics = ["Silhouette Score", "Davies-Bouldin Index"]
+                for metric in clustering_metrics:
+                    if metric in best_model_metrics and isinstance(best_model_metrics[metric], (int, float)):
+                        mlflow.log_metric(metric, best_model_metrics[metric])
+
 
             # Log the CSV file as an artifact
             if os.path.exists(best_models_file):
@@ -103,3 +115,7 @@ def select_best_model(evaluation_df: pd.DataFrame, model_type: str) -> Tuple[str
     except Exception as e:
         logging.error(f"Error selecting best model: {e}")
         raise e
+    
+    finally:
+        if mlflow.active_run():
+            mlflow.end_run()

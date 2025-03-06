@@ -23,16 +23,16 @@ def classification_pipeline(train_data_path: str, test_data_path: str):
     """
     try:
         logging.info("Starting Classification Pipeline...")
-        # Start MLflow Experiment Tracking
-        experiment_tracker = Client().active_stack.experiment_tracker
-        if experiment_tracker:
-            logging.info(f"Using MLflow experiment tracker: {experiment_tracker.name}")
+        # # Start MLflow Experiment Tracking
+        # experiment_tracker = Client().active_stack.experiment_tracker
+        # if experiment_tracker:
+        #     logging.info(f"Using MLflow experiment tracker: {experiment_tracker.name}")
 
         if mlflow.active_run():
             logging.info(f"Active MLflow run: {mlflow.active_run().info.run_id}")
             mlflow.end_run()
 
-        with mlflow.start_run(run_name='Classification Pipeline') as run:
+        with mlflow.start_run(run_name='Classification Pipeline', nested=True) as run:
             run_id = run.info.run_id
             logging.info(f"MLflow run started, Active Run ID: {run_id}")
 
@@ -54,19 +54,9 @@ def classification_pipeline(train_data_path: str, test_data_path: str):
             X_train_balanced, y_train_balanced = balance_train_data(train_scaled, target_col="purchase_completed", method="smote")
             print("Data scaled and balanced")
 
-            # # Step 5: Train Model
-            # trained_classification_models = train_classification(X_train_balanced, y_train_balanced)
-            # print("Model trained")
-
-            # Creating a dummy dictionary
-            trained_classification_models = {
-                "name": "John Doe",
-                "age": 30,
-                "city": "New York",
-                "is_student": False,
-                "hobbies": ["reading", "traveling", "swimming"],
-                "marks": {"math": 85, "science": 92, "english": 78}
-            }
+            # Step 5: Train Model
+            trained_classification_models = train_classification(X_train_balanced, y_train_balanced)
+            print("Model trained")
 
             # Step 6: Evaluate Model
             classification_eval_df = evaluate_classification_step(test_scaled, target_column="purchase_completed", dependency=trained_classification_models) 
@@ -85,3 +75,7 @@ def classification_pipeline(train_data_path: str, test_data_path: str):
     except Exception as e:
         logging.error("Error occurred when running the classification pipeline")
         logging.exception("Full Exception Traceback:")
+
+    finally:
+        if mlflow.active_run():
+            mlflow.end_run()

@@ -23,16 +23,16 @@ def clustering_pipeline(train_data_path: str, test_data_path: str):
     """
     try:
         logging.info("Starting Clustering Pipeline...")
-        # Start MLflow Experiment Tracking
-        experiment_tracker = Client().active_stack.experiment_tracker
-        if experiment_tracker:
-            logging.info(f"Using MLflow experiment tracker: {experiment_tracker.name}")
+        # # Start MLflow Experiment Tracking
+        # experiment_tracker = Client().active_stack.experiment_tracker
+        # if experiment_tracker:
+        #     logging.info(f"Using MLflow experiment tracker: {experiment_tracker.name}")
 
         if mlflow.active_run():
             logging.info(f"Active MLflow run: {mlflow.active_run().info.run_id}")
             mlflow.end_run()
 
-        with mlflow.start_run(run_name='Clustering Pipeline') as run:
+        with mlflow.start_run(run_name='Clustering Pipeline', nested=True) as run:
             run_id = run.info.run_id
             logging.info(f"MLflow run started, Active Run ID: {run_id}")
 
@@ -75,3 +75,7 @@ def clustering_pipeline(train_data_path: str, test_data_path: str):
     except Exception as e:
         logging.error("Error occurred when running the clustering pipeline")
         logging.exception("Full Exception Traceback:")
+
+    finally:
+        if mlflow.active_run():
+            mlflow.end_run()

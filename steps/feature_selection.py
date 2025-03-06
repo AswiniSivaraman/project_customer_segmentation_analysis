@@ -7,6 +7,7 @@ from src.data_feature_selection import (
     feature_selection_regression,
     feature_selection_clustering
 )
+from typing import Tuple
 
 @step
 def select_feature_regression(df: pd.DataFrame, continuous_cols: list, categorical_cols: list, target_col: str) -> list:
@@ -63,7 +64,7 @@ def select_feature_classification(df: pd.DataFrame, continuous_cols: list, categ
 
 
 @step
-def select_feature_clustering(df: pd.DataFrame, variance_threshold: float = 0.01) -> pd.DataFrame:
+def select_feature_clustering(df: pd.DataFrame, variance_threshold: float = 0.01) -> Tuple[pd.DataFrame, list]:
     """
     ZenML Step to perform feature selection for clustering models using Variance Threshold.
 
@@ -79,10 +80,10 @@ def select_feature_clustering(df: pd.DataFrame, variance_threshold: float = 0.01
         
         # Apply Variance Threshold
         df_selected = feature_selection_clustering(df, variance_threshold)
-        
+        selected_columns = df_selected.columns.tolist()
         logging.info(f"Selected Features for Clustering: {df_selected.columns.tolist()}")
         
-        return df_selected
+        return df_selected, selected_columns
 
     except Exception as e:
         logging.error(f"Error in feature selection for clustering: {e}")

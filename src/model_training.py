@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import logging
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.preprocessing import PolynomialFeatures
@@ -45,24 +46,14 @@ def train_regression_model(X_train: pd.DataFrame, y_train: pd.Series):
             "MLPRegressor": MLPRegressor(hidden_layer_sizes=(100,), max_iter=500, random_state=42),
         }
         model_paths = {}
-        print("i the path src/model_training.py") # remove later
 
-        if mlflow.active_run():
-            logging.info(f"Active MLflow run: {mlflow.active_run().info.run_id}")
-            mlflow.end_run()
-
-        with mlflow.start_run(run_name="Train_Regression_Models"):
-            print("starts the loop")  # remove later
-            for name, model in regression_type_models.items():
-                logging.info(f'training {name} model')
-                trained_reg_model, path = train_any_model(model, X_train, y_train, model_name=name, model_type="regression")
+        for name, model in regression_type_models.items():
+            logging.info(f'training {name} model')
+            trained_reg_model, path = train_any_model(model, X_train, y_train, model_name=name, model_type="regression")
                 
-                # Log Model Path in MLflow
-                mlflow.log_param(f"{name}_path", path)
-                
-                logging.info(f"{name} saved at: {path}")
-                print(f"{name} saved at: {path}")
-                model_paths[name] = path
+            logging.info(f"{name} saved at: {path}")
+            print(f"{name} saved at: {path}")
+            model_paths[name] = path
 
         return model_paths
     except Exception as e:
@@ -73,10 +64,10 @@ def train_regression_model(X_train: pd.DataFrame, y_train: pd.Series):
 
 
 
-def train_classification_mode(X_train: pd.DataFrame, y_train: pd.Series):
+def train_classification_model(X_train: pd.DataFrame, y_train: pd.Series):
     """
     Trains multiple classification models using the dictionary `classification_type_models`.
-    
+
     Args:
         X_train (pd.DataFrame): Features for training.
         y_train (pd.Series): Target variable for training.
@@ -84,6 +75,7 @@ def train_classification_mode(X_train: pd.DataFrame, y_train: pd.Series):
     Returns:
         dict: Model names and their corresponding saved file paths.
     """
+    model = None
     try:
         classification_type_models = {
             "LogisticRegression": LogisticRegression(),
@@ -98,69 +90,64 @@ def train_classification_mode(X_train: pd.DataFrame, y_train: pd.Series):
         }
         model_paths = {}
 
-        if mlflow.active_run():
-            logging.info(f"Active MLflow run: {mlflow.active_run().info.run_id}")
-            mlflow.end_run()
-
-        with mlflow.start_run(run_name="Train_Classification_Models"):
-            for name, model in classification_type_models.items():
-                logging.info(f'training {name} model')
-                trained_reg_model, path = train_any_model(model, X_train, y_train, model_name=name, model_type="classification")
-
-                # Log Model Path in MLflow
-                mlflow.log_param(f"{name}_path", path)
-                
-                logging.info(f"{name} saved at: {path}")
-                print(f"{name} saved at: {path}")
-                model_paths[name] = path
+        for name, model in classification_type_models.items():
+            logging.info(f"Training {name} model")
+            trained_class_model, path = train_any_model(model, X_train, y_train, model_name=name, model_type="classification")
+            
+            logging.info(f"{name} saved at: {path}")
+            print(f"{name} saved at: {path}")
+            model_paths[name] = path
 
         return model_paths
     except Exception as e:
-        logging.error(f'Error occured when training the model {model}')
-        logging.exception('Full Exception Traceback: ')
+        logging.error(f"Error occurred when training the model {model}")
+        logging.exception("Full Exception Traceback: ")
         raise e
 
 
 
-def train_clustering_mode(X_train: pd.DataFrame, y_train: pd.Series):
+
+def train_clustering_model(X_train: pd.DataFrame):
     """
     Trains multiple clustering models using the dictionary `clustering_type_models`.
-    
+
     Args:
         X_train (pd.DataFrame): Features for training.
-        y_train (pd.Series): Target variable for training.
 
     Returns:
         dict: Model names and their corresponding saved file paths.
     """
-
+    model = None
     try:
         clustering_type_models = {
             "KMeans": KMeans(n_clusters=5, random_state=42),
             "DBSCAN": DBSCAN(eps=0.5, min_samples=5),
-            "AgglomerativeClustering": AgglomerativeClustering(n_clusters=5),
+            "AgglomerativeClustering": AgglomerativeClustering(n_clusters=2),
             "GaussianMixture": GaussianMixture(n_components=5, random_state=42)
         }
         model_paths = {}
 
-        if mlflow.active_run():
-            logging.info(f"Active MLflow run: {mlflow.active_run().info.run_id}")
-            mlflow.end_run()
-            
-        with mlflow.start_run(run_name="Train_Clustering_Models"):
-            for name, model in clustering_type_models.items():
-                logging.info(f'training {name} model')
-                trained_reg_model, path = train_any_model(model, X_train, y_train, model_name=name, model_type="clustering")
-                
-                # Log Model Path in MLflow
-                mlflow.log_param(f"{name}_path", path)
+        for name, model in clustering_type_models.items():
+            logging.info(f"Training {name} model")
 
-                logging.info(f"{name} saved at: {path}")
-                print(f"{name} saved at: {path}")
-                model_paths[name] = path
+            # Handle large dataset for AgglomerativeClustering
+            if name == "AgglomerativeClustering":
+                if len(X_train) > 5000:
+                    sampled_indices = np.random.choice(X_train.index, 5000, replace=False)
+                    X_train_sampled = X_train.loc[sampled_indices]
+                else:
+                    X_train_sampled = X_train
+            else:
+                X_train_sampled = X_train  # Use full dataset for other models
+
+            trained_clust_model, path = train_any_model(model, X_train_sampled, None, model_name=name, model_type="clustering")
+            
+            logging.info(f"{name} saved at: {path}")
+            print(f"{name} saved at: {path}")
+            model_paths[name] = path
 
         return model_paths
     except Exception as e:
-        logging.error(f'Error occured when training the model {model}')
-        logging.exception('Full Exception Traceback: ')
+        logging.error(f"Error occurred when training the model {model}")
+        logging.exception("Full Exception Traceback: ")
         raise e

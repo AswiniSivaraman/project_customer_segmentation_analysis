@@ -24,15 +24,15 @@ def regression_pipeline(train_data_path: str, test_data_path: str):
     try:
         logging.info("Starting Regression Pipeline...")
         # Start MLflow Experiment Tracking
-        experiment_tracker = Client().active_stack.experiment_tracker
-        if experiment_tracker:
-            logging.info(f"Using MLflow experiment tracker: {experiment_tracker.name}")
+        # experiment_tracker = Client().active_stack.experiment_tracker
+        # if experiment_tracker:
+        #     logging.info(f"Using MLflow experiment tracker: {experiment_tracker.name}")
 
         if mlflow.active_run():
             logging.info(f"Active MLflow run: {mlflow.active_run().info.run_id}")
             mlflow.end_run()
 
-        with mlflow.start_run(run_name='Regression Pipeline') as run:
+        with mlflow.start_run(run_name='Regression Pipeline', nested=True) as run:
             run_id = run.info.run_id
             logging.info(f"MLflow run started, Active Run ID: {run_id}")
 
@@ -57,16 +57,6 @@ def regression_pipeline(train_data_path: str, test_data_path: str):
             trained_regression_models = train_regression(train_scaled, target_col="price") 
             print("Model trained")
 
-            # # Creating a dummy dictionary
-            # trained_regression_models = {
-            #     "name": "John Doe",
-            #     "age": 30,
-            #     "city": "New York",
-            #     "is_student": False,
-            #     "hobbies": ["reading", "traveling", "swimming"],
-            #     "marks": {"math": 85, "science": 92, "english": 78}
-            # }
-
             # Step 6: Evaluate Model
             regression_eval_df = evaluate_regression_step(test_scaled, target_column="price", dependency=trained_regression_models) 
             print("Model evaluation completed")
@@ -85,3 +75,7 @@ def regression_pipeline(train_data_path: str, test_data_path: str):
         logging.error("Error occurred when running the regression pipeline")
         logging.exception("Full Exception Traceback:")
         raise e
+    
+    finally:
+        if mlflow.active_run():
+            mlflow.end_run()

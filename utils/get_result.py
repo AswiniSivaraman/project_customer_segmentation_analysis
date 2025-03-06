@@ -12,21 +12,36 @@ def fetch_best_model_outputs(pipeline_name: str, step_name: str):
         tuple: (best_model, metrics) if found, otherwise (None, None).
     """
     try:
-        # Fetch the latest successful pipeline run
-        pipeline_run = Client().get_pipeline(pipeline_name).last_successful_run
+        # Fetch the pipeline object
+        pipeline = Client().get_pipeline(pipeline_name)
+        if not pipeline:
+            print(f"Pipeline '{pipeline_name}' not found.")
+            return None, None
 
-        if pipeline_run:
-            # Retrieve step outputs
-            outputs = pipeline_run.get_step(step_name).outputs
-
-            # Load model and metrics
-            best_model = outputs["best_model"].load()
-            metrics = outputs["metrics"].load()
-
-            return best_model, metrics
-        else:
+        # Get the last successful pipeline run
+        pipeline_run = pipeline.last_successful_run
+        if not pipeline_run:
             print(f"No successful run found for pipeline: {pipeline_name}")
             return None, None
+
+        # Retrieve step outputs
+        step = pipeline_run.steps.get(step_name)
+        if not step:
+            print(f"Step '{step_name}' not found in pipeline run.")
+            return None, None
+
+        outputs = step.outputs
+
+        # Ensure the necessary outputs exist before loading
+        best_model = outputs.get("best_model")
+        metrics = outputs.get("metrics")
+
+        if best_model is None or metrics is None:
+            print(f"Missing expected outputs in step '{step_name}'.")
+            return None, None
+
+        return best_model.load(), metrics.load()
+
     except Exception as e:
         print(f"Error fetching outputs for {pipeline_name}: {str(e)}")
         return None, None

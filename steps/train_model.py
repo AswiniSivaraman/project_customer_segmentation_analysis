@@ -1,10 +1,13 @@
 import pandas as pd
 import logging
 from zenml import step
-from src.model_training import train_regression_model, train_classification_mode, train_clustering_mode
+from src.model_training import train_regression_model, train_classification_model, train_clustering_model
 import mlflow
+from zenml.client import Client
 
-@step
+experiment_tracker=Client().active_stack.experiment_tracker
+
+@step(experiment_tracker=experiment_tracker.name)
 def train_regression(df: pd.DataFrame, target_col: str) -> dict:
     """
     ZenML Step to train multiple regression models.
@@ -17,7 +20,11 @@ def train_regression(df: pd.DataFrame, target_col: str) -> dict:
         dict: Paths of saved regression models.
     """
     try:
-        with mlflow.start_run(run_name="Step_Train_Regression"):
+        if mlflow.active_run():
+            logging.info(f"Active MLflow run: {mlflow.active_run().info.run_id}")
+            mlflow.end_run()
+
+        with mlflow.start_run(run_name="Step Train Regression"):
             logging.info("Started Training Regression Models...")
 
             assert target_col in df.columns, f"Target column '{target_col}' not found in dataset"
@@ -31,13 +38,6 @@ def train_regression(df: pd.DataFrame, target_col: str) -> dict:
             model_paths = train_regression_model(X_train, y_train)
             logging.info(f"Successfully trained the models")
 
-            # Log total models trained
-            mlflow.log_param("total_models_trained", len(model_paths))
-
-            # Log model paths
-            for model_name, path in model_paths.items():
-                mlflow.log_param(f"{model_name}_path", path)
-
             logging.info(f"Regression models trained and saved: {model_paths}")
             return model_paths
 
@@ -45,10 +45,14 @@ def train_regression(df: pd.DataFrame, target_col: str) -> dict:
         logging.error(f"Error in Regression Model Training: {e}")
         logging.exception('Full Exception Traceback:')
         raise e
+    
+    finally:
+        if mlflow.active_run():
+            mlflow.end_run()
 
 
-@step
-def train_classification(df: pd.DataFrame, target_col: str) -> dict:
+@step(experiment_tracker=experiment_tracker.name)
+def train_classification(X_train: pd.DataFrame, y_train: pd.Series) -> dict:
     """
     ZenML Step to train multiple classification models.
 
@@ -60,30 +64,20 @@ def train_classification(df: pd.DataFrame, target_col: str) -> dict:
         dict: Paths of saved classification models.
     """
     try:
-        with mlflow.start_run(run_name="Step_Train_Classification"):
+        if mlflow.active_run():
+            logging.info(f"Active MLflow run: {mlflow.active_run().info.run_id}")
+            mlflow.end_run()
+
+        with mlflow.start_run(run_name="Step Train Classification"):
             logging.info("Started Training Classification Models...")
+            logging.info(f"Data split completed: Features shape {X_train.shape}, Target shape {y_train.shape}")
 
-            assert target_col in df.columns, f"Target column '{target_col}' not found in dataset"
+            # Train the classification models
+            logging.info("Starting the training of classification models...")
+            model_paths = train_classification_model(X_train, y_train)
+            logging.info(f"Successfully trained the classification models: {model_paths}")
 
-            logging.info("Started to split the Training and Testing data")
-            X_train = df.drop(columns=target_col)  # Drop target column from features
-            y_train = df[target_col]  # Target column
-            print(X_train.columns)
-            print(y_train.head(1))
-            logging.info(f"Training and Testing data splitted successfully: {X_train.shape}, {y_train.shape}")
-
-            logging.info("Started to train the models")
-            model_paths = train_classification_mode(X_train, y_train)
-            logging.info("Successfully trained the models")
-
-            # Log total models trained
-            mlflow.log_param("total_models_trained", len(model_paths))
-
-            # Log model paths
-            for model_name, path in model_paths.items():
-                mlflow.log_param(f"{model_name}_path", path)
-
-            logging.info(f"Classification models trained and saved: {model_paths}")
+            # Simply return the model paths
             return model_paths
 
     except Exception as e:
@@ -91,42 +85,48 @@ def train_classification(df: pd.DataFrame, target_col: str) -> dict:
         logging.exception('Full Exception Traceback:')
         raise e
 
+    finally:
+        if mlflow.active_run():
+            mlflow.end_run()
 
-@step
+
+@step(experiment_tracker=experiment_tracker.name)
 def train_clustering(df: pd.DataFrame) -> dict:
     """
     ZenML Step to train multiple clustering models.
 
     Args:
-        df (pd.DataFrame): Training dataset.
+        df (pd.DataFrame): Dataset for clustering.
 
     Returns:
         dict: Paths of saved clustering models.
     """
     try:
-        with mlflow.start_run(run_name="Step_Train_Clustering"):
+        if mlflow.active_run():
+            logging.info(f"Active MLflow run: {mlflow.active_run().info.run_id}")
+            mlflow.end_run()
+
+        with mlflow.start_run(run_name="Step Train Clustering"):
             logging.info("Started Training Clustering Models...")
 
-            logging.info("Started to prepare the Training data")
-            X_train = df  # No target column for clustering
-            print(X_train.columns)
-            logging.info(f"Training data prepared successfully: {X_train.shape}")
+            # Prepare the data for clustering
+            logging.info("Preparing the data for clustering...")
+            logging.info(f"Dataset shape: {df.shape}, Columns: {list(df.columns)}")
 
-            logging.info("Started to train the models")
-            model_paths = train_clustering_mode(X_train, None)
-            logging.info("Successfully trained the models")
+            # Train the clustering models
+            logging.info("Starting the training of clustering models...")
+            model_paths = train_clustering_model(df)
+            logging.info(f"Successfully trained the clustering models: {model_paths}")
 
-            # Log total models trained
-            mlflow.log_param("total_models_trained", len(model_paths))
-
-            # Log model paths
-            for model_name, path in model_paths.items():
-                mlflow.log_param(f"{model_name}_path", path)
-
-            logging.info(f"Clustering models trained and saved: {model_paths}")
+            # Simply return the model paths
             return model_paths
 
     except Exception as e:
         logging.error(f"Error in Clustering Model Training: {e}")
         logging.exception('Full Exception Traceback:')
         raise e
+
+    finally:
+        if mlflow.active_run():
+            mlflow.end_run()
+
