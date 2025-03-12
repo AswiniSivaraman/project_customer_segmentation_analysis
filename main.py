@@ -5,299 +5,344 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import base64
+import os
+import time
 
-# Set page title and layout
+# -------------------------
+# 0) LOAD BEST MODEL NAMES
+# -------------------------
+best_models_csv = "models/best_models/best_models_file.csv"
+best_models_df = pd.read_csv(best_models_csv)
+
+class_model_name = best_models_df.loc[best_models_df['Model Type'] == 'classification', 'Best Model'].values[0]
+reg_model_name = best_models_df.loc[best_models_df['Model Type'] == 'regression', 'Best Model'].values[0]
+clust_model_name = best_models_df.loc[best_models_df['Model Type'] == 'clustering', 'Best Model'].values[0]
+
+# -------------------------
+# 1) LOAD THE .PKL MODELS
+# -------------------------
+classification_model_path = f"models/classification_models/{class_model_name}.pkl"
+regression_model_path = f"models/regression_models/{reg_model_name}.pkl"
+clustering_model_path = f"models/clustering_models/{clust_model_name}.pkl"
+
+with open(classification_model_path, "rb") as f:
+    classification_model = pickle.load(f)
+with open(regression_model_path, "rb") as f:
+    regression_model = pickle.load(f)
+with open(clustering_model_path, "rb") as f:
+    clustering_model = pickle.load(f)
+
+# -------------------------
+# 2) LOAD SEPARATE ENCODERS
+#    (No standard scaling is applied here)
+# -------------------------
+with open("support/classification_encoded_mappings.pkl", "rb") as f:
+    classification_label_enc = pickle.load(f)
+with open("support/regression_encoded_mappings.pkl", "rb") as f:
+    regression_label_enc = pickle.load(f)
+
+# -------------------------
+# 3) STREAMLIT SETUP & BACKGROUND
+# -------------------------
 st.set_page_config(page_title="Clickstream Customer Conversion Analysis", layout="wide")
 
-# Function to Set Background Image from Local File
-def set_background_contain(image_file):
+def set_background_in_main_area(image_file):
     with open(image_file, "rb") as f:
         encoded_string = base64.b64encode(f.read()).decode()
-
     st.markdown(
         f"""
         <style>
-        .stApp {{
-            background: linear-gradient(
-                rgba(255, 255, 255, 0.8), 
-                rgba(255, 255, 255, 0.8)
-            ), 
-            url("data:image/png;base64,{encoded_string}")
-                no-repeat center center fixed;
-            background-size: contain;
-            background-attachment: fixed;
+        .block-container {{
+            background: linear-gradient(rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.5)),
+                        url("data:image/png;base64,{encoded_string}") no-repeat center center;
+            background-size: 100% 100%;
+        }}
+        [data-testid="stSidebar"] {{
+            background-color: #efefed;
         }}
         </style>
         """,
         unsafe_allow_html=True
     )
-set_background_contain("images/bg_image.png")
 
+set_background_in_main_area("images/bg_image.png")
 
-# -----------------------------------------------------------------------------
-# 1) Load Encoded Mappings
-# -----------------------------------------------------------------------------
-def load_encoded_mappings():
-    with open("support/encoded_mappings.pkl", "rb") as file:
-        mappings = pickle.load(file)
-    return mappings
+st.markdown(
+    """
+    <style>
+    header[data-testid="stHeader"] {
+        background-color: #dde4ec;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
-encoded_mappings = load_encoded_mappings()
-
-# Ensure correct key names for page1_main_category
-if "page1_main_category" not in encoded_mappings:
-    encoded_mappings["page1_main_category"] = encoded_mappings.get("page_1_main_category", {})
-
-# -----------------------------------------------------------------------------
-# 2) Build Decoded Mappings for Display
-#    (Reverse most categories, keep page2_clothing_model/season as-is if needed)
-# -----------------------------------------------------------------------------
-decoded_mappings = {}
-for key, mapping in encoded_mappings.items():
-    if key in ['page2_clothing_model', 'season']:
-        decoded_mappings[key] = mapping
-    else:
-        decoded_mappings[key] = {v: k for k, v in mapping.items()}
-
-# -----------------------------------------------------------------------------
-# 3) Sidebar
-# -----------------------------------------------------------------------------
-st.sidebar.image("images/logo.png", use_column_width=True)  # Replace with your logo file
+st.sidebar.image("images/logo.png", use_column_width=True)
 st.sidebar.title("Customer Conversion Analysis")
 st.sidebar.markdown("**Empowering E-commerce with Data Insights!**")
 
-# -----------------------------------------------------------------------------
-# 4) Main Title and Instructions
-# -----------------------------------------------------------------------------
 st.title("Customer Conversion Analysis for Online Shopping Using Clickstream Data")
 st.markdown(
     """
     Welcome to the interactive web application for **Customer Conversion Analysis**.
     
     **How to Use:**
-    1. Choose between **Manual Input** or **CSV Upload**.
-    2. In **Manual Input**, provide the required values.
-       - **Purchase Prediction (Classification):** Uses 9 features 
-         ['month', 'order', 'session_id', 'page1_main_category', 'page2_clothing_model', 
-          'location', 'price', 'page', 'max_page_reached'] (removed 'purchase_completed').
-       - **Revenue Estimation (Regression):** Uses columns from your pkl (minus 'price') arranged in a 3×3 grid.
-       - **Customer Segmentation (Clustering):** Displays visualizations only.
-    3. In **CSV Upload**, upload your dataset to view the filtered columns and visualizations.
+    1. **Manual Input**: Provide individual values for **Purchase Prediction** or **Revenue Estimation**.
+       - **Purchase Prediction** determines if a customer is likely to make a purchase.
+       - **Revenue Estimation** provides an estimated revenue value.
+    2. **CSV Upload**: Upload your bulk data. A quick preview is shown, then you can run:
+       - **Classification**: Shows whether each customer will purchase or not.
+       - **Regression**: Estimates revenue in dollars.
+       - **Clustering**: Groups similar customers and displays a scatter plot.
+    3. View the results directly in this app, including tables and visualizations.
     """
 )
 
-# -----------------------------------------------------------------------------
-# 5) Choose Input Mode
-# -----------------------------------------------------------------------------
-input_mode = st.radio("Choose Input Method:", ["🖊️ Manual Input", "📂 Upload CSV Data"], index=None)
+# -------------------------
+# 4) HELPER DICTS FOR NON-ENCODED FIELDS
+# -------------------------
+month_map = {"January": 1, "February": 2, "March": 3, "April": 4, "May": 5, "June": 6, "July": 7, "August": 8, "September": 9, "October": 10, "November": 11, "December": 12}
+weekend_map = {"Yes": 1, "No": 0}
 
-# -----------------------------------------------------------------------------
-# 6) Manual Input Mode
-# -----------------------------------------------------------------------------
+def label_to_code(label_dict, chosen_label, use_keys=False):
+    if use_keys:
+        return label_dict.get(chosen_label, 0)
+    for k, v in label_dict.items():
+        if v == chosen_label:
+            return k
+    return 0
+
+# Define column sets for classification, regression, clustering
+CLASSIFICATION_COLS = ['month','order','session_id','page1_main_category','page2_clothing_model','location','price','page','max_page_reached']
+REGRESSION_COLS = ['country','session_id','page1_main_category','page2_clothing_model','colour','location','model_photography','price_2','page','is_weekend','max_page_reached']
+CLUSTERING_COLS = ['month','day','order','country','session_id','page1_main_category','page2_clothing_model','colour','location','model_photography','price','price_2','page','is_weekend','season','total_clicks','max_page_reached']
+
+# If the CSV has slightly different column names, define a rename dictionary:
+RENAME_DICT = { "page_1_main_category": "page1_main_category","page_2_clothing_model": "page2_clothing_model"} # Add any others if your CSV uses different naming
+
+# -------------------------
+# 5) STREAMLIT UI
+# -------------------------
+input_mode = st.radio("Choose Input Method:", ["🖊️ Manual Input", "📂 Upload CSV Data"], index=0)
+
 if input_mode == "🖊️ Manual Input":
     st.subheader("Enter Customer Browsing Details")
-    tab1, tab2, tab3 = st.tabs(["🛍️ Purchase Prediction", "💰 Revenue Estimation", "📊 Customer Segmentation"])
-    
+    tab1, tab2 = st.tabs(["🛍️ Purchase Prediction", "💰 Revenue Estimation"])
+
     # -------------------------------------------------------------------------
-    # 6A) Purchase Prediction (Classification) Tab
-    #     9 features: month, order, session_id, page1_main_category, 
-    #                 page2_clothing_model, location, price, page, max_page_reached
+    # TAB 1: PURCHASE PREDICTION (CLASSIFICATION)
+    # [month, order, session_id, page1_main_category,
+    #  page2_clothing_model, location, price, page, max_page_reached]
     # -------------------------------------------------------------------------
     with tab1:
         st.markdown("### 🛍️ Purchase Prediction (Classification)")
-        
-        # Create a 3×3 grid for the 9 fields
-        row1_col1, row1_col2, row1_col3 = st.columns(3)
-        row2_col1, row2_col2, row2_col3 = st.columns(3)
-        row3_col1, row3_col2, row3_col3 = st.columns(3)
+        col1, col2, col3 = st.columns(3)
+        col4, col5, col6 = st.columns(3)
+        col7, col8, col9 = st.columns(3)
 
-        # --- ROW 1 ---
-        with row1_col1:
-            month_pred = st.selectbox(
-                "📆 Month", 
-                [
-                    "January", "February", "March", "April", "May", 
-                    "June", "July", "August", "September", "October", 
-                    "November", "December"
-                ],
-                key="month_pred"
-            )
-        with row1_col2:
-            order_pred = st.number_input("📌 Sequence of Clicks", min_value=1, value=1, key="order_pred")
-        with row1_col3:
-            session_id_pred = st.text_input("🆔 Session ID", key="session_id_pred")
+        with col1:
+            month_pred = st.selectbox("📆 Month", list(month_map.keys()))
+        with col2:
+            order_pred = st.number_input("📌 Sequence of Clicks", min_value=1, value=1)
+        with col3:
+            session_id_pred = st.text_input("🆔 Session ID")
 
-        # --- ROW 2 ---
-        with row2_col1:
-            page1_main_category_pred = st.selectbox(
-                "📁 Main Product Category", 
-                list(decoded_mappings["page1_main_category"].keys()), 
-                key="page1_main_category_pred"
-            )
-        with row2_col2:
-            page2_clothing_model_pred = st.selectbox(
-                "👕 Clothing Model", 
-                list(decoded_mappings["page2_clothing_model"].keys()), 
-                key="page2_clothing_model_pred"
-            )
-        with row2_col3:
-            location_pred = st.selectbox(
-                "📍 Photo Location", 
-                list(decoded_mappings["location"].keys()), 
-                key="location_pred"
-            )
+        with col4:
+            page1_dict = classification_label_enc["page_1_main_category"]
+            page1_labels = list(page1_dict.values())
+            chosen_page1_label = st.selectbox("📁 Main Product Category", page1_labels)
+        with col5:
+            page2_dict = classification_label_enc["page2_clothing_model"]
+            page2_labels = list(page2_dict.keys())
+            chosen_page2_label = st.selectbox("👕 Clothing Model", page2_labels)
+        with col6:
+            loc_dict = classification_label_enc["location"]
+            loc_labels = list(loc_dict.values())
+            chosen_loc_label = st.selectbox("📍 Photo Location", loc_labels)
+        with col7:
+            price_pred = st.number_input("💲 Price", min_value=1, value=50)
+        with col8:
+            page_dict = classification_label_enc["page"]
+            page_labels = list(page_dict.values())
+            chosen_page_label = st.selectbox("📄 Page", page_labels)
+        with col9:
+            max_page_reached_pred = st.slider("📄 Max Page Reached", 1, 5, 2)
 
-        # --- ROW 3 ---
-        with row3_col1:
-            price_pred = st.number_input("💲 Price", min_value=1, value=50, key="price_pred")
-        with row3_col2:
-            page_pred = st.selectbox(
-                "📄 Page", 
-                list(decoded_mappings["page"].keys()), 
-                key="page_pred"
-            )
-        with row3_col3:
-            max_page_reached_pred = st.slider("📄 Max Page Reached", 1, 5, 2, key="max_page_reached_pred")
+        if st.button("🚀 Predict Purchase Conversion", use_container_width=True):
+            month_val = month_map[month_pred]
+            session_id_val = int(session_id_pred) if session_id_pred.isdigit() else 0
+            page1_code = label_to_code(page1_dict, chosen_page1_label)
+            page2_code = label_to_code(page2_dict, chosen_page2_label, use_keys=True)
+            location_code = label_to_code(loc_dict, chosen_loc_label)
+            page_code = label_to_code(page_dict, chosen_page_label)
 
-        # Wide button at the bottom
-        predict_btn = st.button("🚀 Predict Purchase Conversion", use_container_width=True)
-        if predict_btn:
-            st.success("Classification Model Will Be Integrated Soon!")
-    
+            X_class = [[month_val,order_pred,session_id_val,page1_code,page2_code,location_code,price_pred,page_code,max_page_reached_pred]]
+
+            y_pred_class = classification_model.predict(X_class)
+            if y_pred_class[0] == 1:
+                st.success("This customer WILL make a purchase!")
+            else:
+                st.warning("This customer will NOT make a purchase.")
+
     # -------------------------------------------------------------------------
-    # 6B) Revenue Estimation (Regression) Tab
-    #     11 columns minus 'price', arranged in a 3×3 grid + final row
+    # TAB 2: REVENUE ESTIMATION (REGRESSION)
+    # [country, session_id, page1_main_category, page2_clothing_model, colour,
+    #  location, model_photography, price_2, page, is_weekend, max_page_reached]
     # -------------------------------------------------------------------------
     with tab2:
         st.markdown("### 💰 Revenue Estimation (Regression)")
-        
-        # 3×3 grid for first 9 fields
-        row1_col1, row1_col2, row1_col3 = st.columns(3)
-        row2_col1, row2_col2, row2_col3 = st.columns(3)
-        row3_col1, row3_col2, row3_col3 = st.columns(3)
+        col1, col2, col3 = st.columns(3)
+        col4, col5, col6 = st.columns(3)
+        col7, col8, col9 = st.columns(3)
 
-        # Row 1
-        with row1_col1:
-            country_rev = st.selectbox(
-                "Country", 
-                list(decoded_mappings.get("country", {}).keys()),
-                key="country_rev"
-            )
-        with row1_col2:
-            session_id_rev = st.text_input("Session ID", key="session_id_rev")
-        with row1_col3:
-            page1_main_category_rev = st.selectbox(
-                "Main Product Category",
-                list(decoded_mappings.get("page1_main_category", {}).keys()),
-                key="page1_main_category_rev"
-            )
-        
-        # Row 2
-        with row2_col1:
-            page2_clothing_model_rev = st.selectbox(
-                "Clothing Model",
-                list(decoded_mappings.get("page2_clothing_model", {}).keys()),
-                key="page2_clothing_model_rev"
-            )
-        with row2_col2:
-            colour_rev = st.selectbox(
-                "Colour",
-                list(decoded_mappings.get("colour", {}).keys()),
-                key="colour_rev"
-            )
-        with row2_col3:
-            location_rev = st.selectbox(
-                "Location",
-                list(decoded_mappings.get("location", {}).keys()),
-                key="location_rev"
-            )
+        with col1:
+            country_dict = regression_label_enc["country"]
+            country_labels = list(country_dict.values())
+            chosen_country_label = st.selectbox("Country", country_labels)
+        with col2:
+            session_id_rev = st.text_input("Session ID")
+        with col3:
+            page1_dict_reg = regression_label_enc["page_1_main_category"]
+            page1_labels_reg = list(page1_dict_reg.values())
+            chosen_page1_label_reg = st.selectbox("Main Product Category", page1_labels_reg)
+        with col4:
+            page2_dict_reg = regression_label_enc["page2_clothing_model"]
+            page2_labels_reg = list(page2_dict_reg.keys())
+            chosen_page2_label_reg = st.selectbox("Clothing Model", page2_labels_reg)
+        with col5:
+            colour_dict_reg = regression_label_enc["colour"]
+            colour_labels_reg = list(colour_dict_reg.values())
+            chosen_colour_label_reg = st.selectbox("Colour", colour_labels_reg)
+        with col6:
+            location_dict_reg = regression_label_enc["location"]
+            location_labels_reg = list(location_dict_reg.values())
+            chosen_location_label_reg = st.selectbox("Location", location_labels_reg)
+        with col7:
+            model_photo_dict_reg = regression_label_enc["model_photography"]
+            model_photo_labels_reg = list(model_photo_dict_reg.values())
+            chosen_model_photo_label_reg = st.selectbox("Model Photography", model_photo_labels_reg)
+        with col8:
+            price2_dict_reg = regression_label_enc["price_2"]
+            price2_labels_reg = list(price2_dict_reg.values())
+            chosen_price2_label_reg = st.selectbox("Price Compared to Category Avg", price2_labels_reg)
+        with col9:
+            page_dict_reg = regression_label_enc["page"]
+            page_labels_reg = list(page_dict_reg.values())
+            chosen_page_label_reg = st.selectbox("Page", page_labels_reg)
 
-        # Row 3
-        with row3_col1:
-            model_photography_rev = st.selectbox(
-                "Model Photography",
-                list(decoded_mappings.get("model_photography", {}).keys()),
-                key="model_photography_rev"
-            )
-        with row3_col2:
-            price_2_rev = st.selectbox(
-                "Price Compared to Category Avg",
-                list(decoded_mappings.get("price_2", {}).keys()),
-                key="price_2_rev"
-            )
-        with row3_col3:
-            page_rev = st.selectbox(
-                "Page",
-                list(decoded_mappings.get("page", {}).keys()),
-                key="page_rev"
-            )
-
-        # Final row for the last 2 fields + wide button
-        last_row_col1, last_row_col2 = st.columns([3,2])  # ratio for alignment
+        last_row_col1, last_row_col2 = st.columns([3,2])
         with last_row_col1:
-            is_weekend_rev = st.radio("Is Weekend?", ["Yes", "No"], key="is_weekend_rev")
-            max_page_reached_rev = st.slider("Max Page Reached", 1, 5, 2, key="max_page_reached_rev")
+            is_weekend_rev = st.radio("Is Weekend?", ["Yes", "No"])
+            max_page_reached_rev = st.slider("Max Page Reached", 1, 5, 2)
 
-        estimate_btn = st.button("Estimate Revenue", use_container_width=True)
-        if estimate_btn:
-            st.success("Regression Model Will Be Integrated Soon!")
-    
-    # -------------------------------------------------------------------------
-    # 6C) Customer Segmentation (Clustering) Tab
-    # -------------------------------------------------------------------------
-    with tab3:
-        st.markdown("### 📊 Customer Segmentation (Clustering Analysis)")
-        st.info("Clustering visualizations will be displayed here.")
-        # Example Visualization: Distribution of Price (just a placeholder)
-        fig, ax = plt.subplots()
-        sample_values = [10, 20, 30, 40, 50]  # dummy data
-        sns.histplot(sample_values, bins=5, kde=True, ax=ax)
-        ax.set_title("Example Distribution (Clustering)")
-        st.pyplot(fig)
+        if st.button("Estimate Revenue", use_container_width=True):
+            session_id_val = int(session_id_rev) if session_id_rev.isdigit() else 0
+            country_code = label_to_code(country_dict, chosen_country_label)
+            page1_code = label_to_code(page1_dict_reg, chosen_page1_label_reg)
+            page2_code = label_to_code(page2_dict_reg, chosen_page2_label_reg, use_keys=True)
+            colour_code = label_to_code(colour_dict_reg, chosen_colour_label_reg)
+            location_code = label_to_code(location_dict_reg, chosen_location_label_reg)
+            model_photo_code = label_to_code(model_photo_dict_reg, chosen_model_photo_label_reg)
+            price_2_code = label_to_code(price2_dict_reg, chosen_price2_label_reg)
+            page_code = label_to_code(page_dict_reg, chosen_page_label_reg)
+            weekend_val = weekend_map[is_weekend_rev]
 
-# -----------------------------------------------------------------------------
-# 7) CSV Upload Mode
-# -----------------------------------------------------------------------------
+            X_reg = [[country_code,session_id_val,page1_code,page2_code,colour_code,location_code,model_photo_code,price_2_code,page_code,weekend_val,max_page_reached_rev]]
+            y_pred_reg = regression_model.predict(X_reg)
+            st.success(f"Estimated Revenue: ${y_pred_reg[0]:.2f}")
+
+# -------------------------------------------------------------------------
+# CSV UPLOAD MODE WITH BULK PREDICTION
+# -------------------------------------------------------------------------
 elif input_mode == "📂 Upload CSV Data":
-    st.subheader("Upload Your Clickstream Data")
+    st.subheader("Upload Your Bulk Prediction CSV File")
     uploaded_file = st.file_uploader("📎 Choose a CSV file", type=["csv"])
     if uploaded_file:
-        df = pd.read_csv(uploaded_file)
-        st.subheader("📜 Data Preview")
-        st.write(df.head())
+        with st.spinner("Loading and processing CSV data..."):
+            df = pd.read_csv(uploaded_file)
+            time.sleep(2)  # Simulate processing delay
+
+        # 1) Rename columns if needed
+        RENAME_DICT = {
+            "page_1_main_category": "page1_main_category",
+            "page_2_clothing_model": "page2_clothing_model",
+            # add any other potential mismatches here
+        }
+        rename_map = {}
+        for old_col, new_col in RENAME_DICT.items():
+            if old_col in df.columns:
+                rename_map[old_col] = new_col
+        if rename_map:
+            df.rename(columns=rename_map, inplace=True)
+
+        st.subheader("Data Preview (First Row)")
+        st.write(df.head(1))
         
-        # Tabs for CSV analysis
-        tab1, tab2, tab3 = st.tabs(["🛍️ Purchase Prediction", "💰 Revenue Estimation", "📊 Customer Segmentation"])
-        
-        # Classification columns (unchanged from your code)
+        # define the columns for classification, regression, clustering
+        CLASSIFICATION_COLS = [ 'month','order','session_id','page1_main_category','page2_clothing_model','location','price','page','max_page_reached']
+        REGRESSION_COLS = ['country','session_id','page1_main_category','page2_clothing_model','colour','location','model_photography','price_2','page','is_weekend','max_page_reached']
+        CLUSTERING_COLS = ['month','day','order','country','session_id','page1_main_category','page2_clothing_model','colour','location','model_photography','price','price_2','page','is_weekend','season','total_clicks','max_page_reached']
+
+        tab1, tab2, tab3 = st.tabs(["🛍️ Classification", "💰 Regression", "📊 Clustering"])
+
         with tab1:
-            st.markdown("### 🛍️ Purchase Prediction Results")
-            selected_cols_class = [
-                'month', 'order', 'session_id', 'page1_main_category',
-                'page2_clothing_model', 'location', 'price', 'page',
-                'max_page_reached', 'purchase_completed'
-            ]
-            common_cols_class = [col for col in selected_cols_class if col in df.columns]
-            st.write(df[common_cols_class].head())
-        
-        # Regression columns
+            st.markdown("### Bulk Classification")
+            if st.button("Run Bulk Classification"):
+                with st.spinner("Running classification predictions..."):
+                    if not set(CLASSIFICATION_COLS).issubset(df.columns):
+                        missing_cols = set(CLASSIFICATION_COLS) - set(df.columns)
+                        st.error(f"CSV is missing classification columns: {missing_cols}")
+                    else:
+                        X_class_bulk = df[CLASSIFICATION_COLS]
+                        preds = classification_model.predict(X_class_bulk)
+                        result_class = pd.DataFrame({
+                            "session_id": df["session_id"],
+                            "Prediction": [
+                                "WILL make a purchase" if p==1 else "will NOT make a purchase"
+                                for p in preds
+                            ]
+                        })
+                        st.success("Bulk Classification Results:")
+                        st.write(result_class)
+
         with tab2:
-            st.markdown("### 💰 Revenue Estimation Results")
-            selected_cols_reg = [
-                'country', 'session_id', 'page1_main_category', 'page2_clothing_model',
-                'colour', 'location', 'model_photography', 'price_2',
-                'page', 'is_weekend', 'max_page_reached'
-            ]
-            common_cols_reg = [col for col in selected_cols_reg if col in df.columns]
-            st.write(df[common_cols_reg].head())
-        
-        # Clustering: Visualizations only
+            st.markdown("### Bulk Regression")
+            if st.button("Run Bulk Regression"):
+                with st.spinner("Running regression predictions..."):
+                    if not set(REGRESSION_COLS).issubset(df.columns):
+                        missing_cols = set(REGRESSION_COLS) - set(df.columns)
+                        st.error(f"CSV is missing regression columns: {missing_cols}")
+                    else:
+                        X_reg_bulk = df[REGRESSION_COLS]
+                        preds_reg = regression_model.predict(X_reg_bulk)
+                        result_reg = pd.DataFrame({
+                            "session_id": df["session_id"],
+                            "Estimated Revenue": [f"${pred:.2f}" for pred in preds_reg]
+                        })
+                        st.success("Bulk Regression Results:")
+                        st.write(result_reg)
+
         with tab3:
-            st.markdown("### 📊 Customer Segmentation (Clustering Analysis)")
-            fig, ax = plt.subplots()
-            if "price" in df.columns and "max_page_reached" in df.columns:
-                sns.scatterplot(x=df["max_page_reached"], y=df["price"], ax=ax)
-                ax.set_title("Price vs. Max Page Reached")
-                st.pyplot(fig)
-            else:
-                st.info("Required columns for clustering visualization are missing.")
+            st.markdown("### Bulk Clustering")
+            if st.button("Run Bulk Clustering"):
+                with st.spinner("Running clustering predictions..."):
+                    # For clustering, we want all 17 columns
+                    if not set(CLUSTERING_COLS).issubset(df.columns):
+                        missing_cols = set(CLUSTERING_COLS) - set(df.columns)
+                        st.error(f"CSV is missing clustering columns: {missing_cols}")
+                    else:
+                        X_clust_bulk = df[CLUSTERING_COLS]
+                        cluster_labels = clustering_model.predict(X_clust_bulk)
+                        df["Cluster"] = cluster_labels
+                        st.success("Bulk Clustering Results (first 10 rows):")
+                        st.write(df[["session_id", "Cluster"]].head(10))
+                        fig, ax = plt.subplots()
+                        sns.scatterplot(
+                            x=df["max_page_reached"], 
+                            y=df["total_clicks"], 
+                            hue=df["Cluster"], 
+                            ax=ax
+                        )
+                        ax.set_title("Clustering Visualization")
+                        st.pyplot(fig)
