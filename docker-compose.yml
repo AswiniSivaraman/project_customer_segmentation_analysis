@@ -1,0 +1,43 @@
+version: "3.8"
+
+services:
+  mlflow:
+    build:
+      context: .
+      dockerfile: docker/docker.mlflow
+    container_name: mlflow_server
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlruns:/app/mlruns
+      - mlflow_artifacts:/app/mlflow/artifacts
+
+  mainpipeline:
+    build:
+      context: .
+      dockerfile: docker/docker.mainpipeline
+    container_name: main_pipeline_app
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - ZENML_STACK_NAME=mlflow_stack
+      - ZENML_CONFIG_PATH=/root/.zen 
+    volumes:
+      - ./.zen:/root/.zen
+    depends_on:
+      - mlflow
+
+  streamlit:
+    build:
+      context: .
+      dockerfile: docker/docker.streamlit
+    container_name: streamlit_app
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./models:/app/models
+      - ./data:/app/data
+    depends_on:
+      - mainpipeline
+
+volumes:
+  mlflow_artifacts:
