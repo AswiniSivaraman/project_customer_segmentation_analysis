@@ -34,12 +34,44 @@ with open(clustering_model_path, "rb") as f:
 
 # -------------------------
 # 2) LOAD SEPARATE ENCODERS
-#    (No standard scaling is applied here)
 # -------------------------
 with open("support/classification_encoded_mappings.pkl", "rb") as f:
     classification_label_enc = pickle.load(f)
 with open("support/regression_encoded_mappings.pkl", "rb") as f:
     regression_label_enc = pickle.load(f)
+
+# -------------------------
+# 2b) LOAD STANDARD SCALERS
+# -------------------------
+with open("support/classification_standard_scaler.pkl", "rb") as f:
+    classification_scaler = pickle.load(f)
+with open("support/regression_standard_scaler.pkl", "rb") as f:
+    regression_scaler = pickle.load(f)
+with open("support/clustering_standard_scaler.pkl", "rb") as f:
+    clustering_scaler = pickle.load(f)
+
+# -------------------------
+# Helper Function for Partial Scaling
+# -------------------------
+def scale_subset(scaler, df_subset):
+    """
+    For each column in df_subset, if the column was used during scaler training
+    (i.e. exists in scaler.feature_names_in_), apply standard scaling using the 
+    stored mean and scale. Otherwise, leave the column unchanged.
+    
+    Returns a DataFrame with all columns (scaled or original) in the same order.
+    """
+    train_cols = scaler.feature_names_in_
+    transformed = {}
+    for col in df_subset.columns:
+        if col in train_cols:
+            index = list(train_cols).index(col)
+            mean = scaler.mean_[index]
+            scale = scaler.scale_[index]
+            transformed[col] = (df_subset[col] - mean) / scale
+        else:
+            transformed[col] = df_subset[col]
+    return pd.DataFrame(transformed, index=df_subset.index)
 
 # -------------------------
 # 3) STREAMLIT SETUP & BACKGROUND
@@ -88,12 +120,12 @@ st.markdown(
     Welcome to the interactive web application for **Customer Conversion Analysis**.
     
     **How to Use:**
-    1. **Manual Input**: Provide individual values for **Purchase Prediction** or **Revenue Estimation**.
+    1. **Manual Input**: Provide individual values for **Purchase Prediction** or **Price Estimation**.
        - **Purchase Prediction** determines if a customer is likely to make a purchase.
-       - **Revenue Estimation** provides an estimated revenue value.
+       - **Price Estimation** provides an estimated price value.
     2. **CSV Upload**: Upload your bulk data. A quick preview is shown, then you can run:
        - **Classification**: Shows whether each customer will purchase or not.
-       - **Regression**: Estimates revenue in dollars.
+       - **Regression**: Estimates price in dollars.
        - **Clustering**: Groups similar customers and displays a scatter plot.
     3. View the results directly in this app, including tables and visualizations.
     """
@@ -102,10 +134,17 @@ st.markdown(
 # -------------------------
 # 4) HELPER DICTS FOR NON-ENCODED FIELDS
 # -------------------------
-month_map = {"January": 1, "February": 2, "March": 3, "April": 4, "May": 5, "June": 6, "July": 7, "August": 8, "September": 9, "October": 10, "November": 11, "December": 12}
+month_map = {
+    "January": 1, "February": 2, "March": 3, "April": 4, "May": 5, "June": 6,
+    "July": 7, "August": 8, "September": 9, "October": 10, "November": 11, "December": 12
+}
 weekend_map = {"Yes": 1, "No": 0}
 
 def label_to_code(label_dict, chosen_label, use_keys=False):
+    """
+    Convert a displayed label (value) back to its original code (key)
+    or vice versa, depending on use_keys.
+    """
     if use_keys:
         return label_dict.get(chosen_label, 0)
     for k, v in label_dict.items():
@@ -113,27 +152,45 @@ def label_to_code(label_dict, chosen_label, use_keys=False):
             return k
     return 0
 
-# Define column sets for classification, regression, clustering
-CLASSIFICATION_COLS = ['month','order','session_id','page1_main_category','page2_clothing_model','location','price','page','max_page_reached']
-REGRESSION_COLS = ['country','session_id','page1_main_category','page2_clothing_model','colour','location','model_photography','price_2','page','is_weekend','max_page_reached']
-CLUSTERING_COLS = ['month','day','order','country','session_id','page1_main_category','page2_clothing_model','colour','location','model_photography','price','price_2','page','is_weekend','season','total_clicks','max_page_reached']
+# -----------------------------------------
+# FEATURE LISTS (Ensure spelling matches)
+# -----------------------------------------
+CLASSIFICATION_COLS = [
+    'month','order','session_id','page1_main_category','page2_clothing_model',
+    'location','price','page','max_page_reached'
+]
+# For regression, remove 'price' because it is the target to be predicted
+REGRESSION_COLS = [
+    'country','session_id','page1_main_category','page2_clothing_model',
+    'colour','location','model_photography','price_2','page','is_weekend',
+    'max_page_reached'
+]
+CLUSTERING_COLS = [
+    'month','day','order','country','session_id','page1_main_category',
+    'page2_clothing_model','colour','location','model_photography','price',
+    'price_2','page','is_weekend','season','total_clicks','max_page_reached'
+]
 
 # If the CSV has slightly different column names, define a rename dictionary:
-RENAME_DICT = { "page_1_main_category": "page1_main_category","page_2_clothing_model": "page2_clothing_model"} # Add any others if your CSV uses different naming
+RENAME_DICT = {
+    "page_1_main_category": "page1_main_category",
+    "page_2_clothing_model": "page2_clothing_model"
+}
 
 # -------------------------
 # 5) STREAMLIT UI
 # -------------------------
 input_mode = st.radio("Choose Input Method:", ["🖊️ Manual Input", "📂 Upload CSV Data"], index=0)
 
+# =============================================================================
+#                         MANUAL INPUT MODE
+# =============================================================================
 if input_mode == "🖊️ Manual Input":
     st.subheader("Enter Customer Browsing Details")
-    tab1, tab2 = st.tabs(["🛍️ Purchase Prediction", "💰 Revenue Estimation"])
+    tab1, tab2 = st.tabs(["🛍️ Purchase Prediction", "💰 Price Estimation"])
 
     # -------------------------------------------------------------------------
     # TAB 1: PURCHASE PREDICTION (CLASSIFICATION)
-    # [month, order, session_id, page1_main_category,
-    #  page2_clothing_model, location, price, page, max_page_reached]
     # -------------------------------------------------------------------------
     with tab1:
         st.markdown("### 🛍️ Purchase Prediction (Classification)")
@@ -170,6 +227,7 @@ if input_mode == "🖊️ Manual Input":
             max_page_reached_pred = st.slider("📄 Max Page Reached", 1, 5, 2)
 
         if st.button("🚀 Predict Purchase Conversion", use_container_width=True):
+            # Convert all labels/inputs to numeric codes
             month_val = month_map[month_pred]
             session_id_val = int(session_id_pred) if session_id_pred.isdigit() else 0
             page1_code = label_to_code(page1_dict, chosen_page1_label)
@@ -177,21 +235,34 @@ if input_mode == "🖊️ Manual Input":
             location_code = label_to_code(loc_dict, chosen_loc_label)
             page_code = label_to_code(page_dict, chosen_page_label)
 
-            X_class = [[month_val,order_pred,session_id_val,page1_code,page2_code,location_code,price_pred,page_code,max_page_reached_pred]]
+            # Create a DataFrame for the single input row
+            X_class = pd.DataFrame([{
+                'month': month_val,
+                'order': order_pred,
+                'session_id': session_id_val,
+                'page1_main_category': page1_code,
+                'page2_clothing_model': page2_code,
+                'location': location_code,
+                'price': price_pred,
+                'page': page_code,
+                'max_page_reached': max_page_reached_pred
+            }])
 
-            y_pred_class = classification_model.predict(X_class)
+            # Use the helper to scale only the columns in X_class that are in the scaler
+            X_class_scaled = scale_subset(classification_scaler, X_class)
+            # Predict
+            y_pred_class = classification_model.predict(X_class_scaled)
             if y_pred_class[0] == 1:
                 st.success("This customer WILL make a purchase!")
             else:
                 st.warning("This customer will NOT make a purchase.")
 
     # -------------------------------------------------------------------------
-    # TAB 2: REVENUE ESTIMATION (REGRESSION)
-    # [country, session_id, page1_main_category, page2_clothing_model, colour,
-    #  location, model_photography, price_2, page, is_weekend, max_page_reached]
+    # TAB 2: PRICE ESTIMATION (REGRESSION)
+    #   We now PREDICT "price" as the target. So "price" is not an input.
     # -------------------------------------------------------------------------
     with tab2:
-        st.markdown("### 💰 Revenue Estimation (Regression)")
+        st.markdown("### 💰 Price Estimation (Regression)")
         col1, col2, col3 = st.columns(3)
         col4, col5, col6 = st.columns(3)
         col7, col8, col9 = st.columns(3)
@@ -225,7 +296,7 @@ if input_mode == "🖊️ Manual Input":
         with col8:
             price2_dict_reg = regression_label_enc["price_2"]
             price2_labels_reg = list(price2_dict_reg.values())
-            chosen_price2_label_reg = st.selectbox("Price Compared to Category Avg", price2_labels_reg)
+            chosen_price2_label_reg = st.selectbox("Price Compared to Avg", price2_labels_reg)
         with col9:
             page_dict_reg = regression_label_enc["page"]
             page_labels_reg = list(page_dict_reg.values())
@@ -236,7 +307,7 @@ if input_mode == "🖊️ Manual Input":
             is_weekend_rev = st.radio("Is Weekend?", ["Yes", "No"])
             max_page_reached_rev = st.slider("Max Page Reached", 1, 5, 2)
 
-        if st.button("Estimate Revenue", use_container_width=True):
+        if st.button("Estimate Price", use_container_width=True):
             session_id_val = int(session_id_rev) if session_id_rev.isdigit() else 0
             country_code = label_to_code(country_dict, chosen_country_label)
             page1_code = label_to_code(page1_dict_reg, chosen_page1_label_reg)
@@ -248,13 +319,30 @@ if input_mode == "🖊️ Manual Input":
             page_code = label_to_code(page_dict_reg, chosen_page_label_reg)
             weekend_val = weekend_map[is_weekend_rev]
 
-            X_reg = [[country_code,session_id_val,page1_code,page2_code,colour_code,location_code,model_photo_code,price_2_code,page_code,weekend_val,max_page_reached_rev]]
-            y_pred_reg = regression_model.predict(X_reg)
-            st.success(f"Estimated Revenue: ${y_pred_reg[0]:.2f}")
+            # Create a DataFrame for the single input row
+            X_reg = pd.DataFrame([{
+                'country': country_code,
+                'session_id': session_id_val,
+                'page1_main_category': page1_code,
+                'page2_clothing_model': page2_code,
+                'colour': colour_code,
+                'location': location_code,
+                'model_photography': model_photo_code,
+                'price_2': price_2_code,
+                'page': page_code,
+                'is_weekend': weekend_val,
+                'max_page_reached': max_page_reached_rev
+            }])
 
-# -------------------------------------------------------------------------
-# CSV UPLOAD MODE WITH BULK PREDICTION
-# -------------------------------------------------------------------------
+            # Scale only the columns in X_reg that are in the scaler
+            X_reg_scaled = scale_subset(regression_scaler, X_reg)
+            # Predict (this will be the predicted "price")
+            y_pred_reg = regression_model.predict(X_reg_scaled)
+            st.success(f"Estimated Price: ${y_pred_reg[0]:.2f}")
+
+# =============================================================================
+#                         CSV UPLOAD MODE
+# =============================================================================
 elif input_mode == "📂 Upload CSV Data":
     st.subheader("Upload Your Bulk Prediction CSV File")
     uploaded_file = st.file_uploader("📎 Choose a CSV file", type=["csv"])
@@ -264,11 +352,6 @@ elif input_mode == "📂 Upload CSV Data":
             time.sleep(2)  # Simulate processing delay
 
         # 1) Rename columns if needed
-        RENAME_DICT = {
-            "page_1_main_category": "page1_main_category",
-            "page_2_clothing_model": "page2_clothing_model",
-            # add any other potential mismatches here
-        }
         rename_map = {}
         for old_col, new_col in RENAME_DICT.items():
             if old_col in df.columns:
@@ -278,14 +361,30 @@ elif input_mode == "📂 Upload CSV Data":
 
         st.subheader("Data Preview (First Row)")
         st.write(df.head(1))
-        
-        # define the columns for classification, regression, clustering
-        CLASSIFICATION_COLS = [ 'month','order','session_id','page1_main_category','page2_clothing_model','location','price','page','max_page_reached']
-        REGRESSION_COLS = ['country','session_id','page1_main_category','page2_clothing_model','colour','location','model_photography','price_2','page','is_weekend','max_page_reached']
-        CLUSTERING_COLS = ['month','day','order','country','session_id','page1_main_category','page2_clothing_model','colour','location','model_photography','price','price_2','page','is_weekend','season','total_clicks','max_page_reached']
+
+        # Define the columns for classification, regression, clustering
+        CLASSIFICATION_COLS = [
+            'month','order','session_id','page1_main_category','page2_clothing_model',
+            'location','price','page','max_page_reached'
+        ]
+        # For regression, we exclude 'price' because it's our target
+        REGRESSION_COLS = [
+            'country','session_id','page1_main_category','page2_clothing_model',
+            'colour','location','model_photography','price_2','page','is_weekend',
+            'max_page_reached'
+        ]
+        CLUSTERING_COLS = [
+            'month','day','order','country','session_id','page1_main_category',
+            'page2_clothing_model','colour','location','model_photography',
+            'price','price_2','page','is_weekend','season','total_clicks',
+            'max_page_reached'
+        ]
 
         tab1, tab2, tab3 = st.tabs(["🛍️ Classification", "💰 Regression", "📊 Clustering"])
 
+        # ---------------------------------------------------------------------
+        # BULK CLASSIFICATION
+        # ---------------------------------------------------------------------
         with tab1:
             st.markdown("### Bulk Classification")
             if st.button("Run Bulk Classification"):
@@ -294,49 +393,62 @@ elif input_mode == "📂 Upload CSV Data":
                         missing_cols = set(CLASSIFICATION_COLS) - set(df.columns)
                         st.error(f"CSV is missing classification columns: {missing_cols}")
                     else:
-                        X_class_bulk = df[CLASSIFICATION_COLS]
-                        preds = classification_model.predict(X_class_bulk)
+                        X_class_bulk = df[CLASSIFICATION_COLS].copy()
+                        # Scale using only the matching columns
+                        X_class_bulk_scaled = scale_subset(classification_scaler, X_class_bulk)
+                        preds = classification_model.predict(X_class_bulk_scaled)
                         result_class = pd.DataFrame({
                             "session_id": df["session_id"],
                             "Prediction": [
-                                "WILL make a purchase" if p==1 else "will NOT make a purchase"
+                                "WILL make a purchase" if p == 1 else "will NOT make a purchase"
                                 for p in preds
                             ]
                         })
                         st.success("Bulk Classification Results:")
                         st.write(result_class)
 
+        # ---------------------------------------------------------------------
+        # BULK REGRESSION
+        # ---------------------------------------------------------------------
         with tab2:
-            st.markdown("### Bulk Regression")
+            st.markdown("### Bulk Regression (Predicting Price)")
             if st.button("Run Bulk Regression"):
                 with st.spinner("Running regression predictions..."):
                     if not set(REGRESSION_COLS).issubset(df.columns):
                         missing_cols = set(REGRESSION_COLS) - set(df.columns)
                         st.error(f"CSV is missing regression columns: {missing_cols}")
                     else:
-                        X_reg_bulk = df[REGRESSION_COLS]
-                        preds_reg = regression_model.predict(X_reg_bulk)
+                        X_reg_bulk = df[REGRESSION_COLS].copy()
+                        # Scale only the columns present
+                        X_reg_bulk_scaled = scale_subset(regression_scaler, X_reg_bulk)
+                        preds_reg = regression_model.predict(X_reg_bulk_scaled)
                         result_reg = pd.DataFrame({
                             "session_id": df["session_id"],
-                            "Estimated Revenue": [f"${pred:.2f}" for pred in preds_reg]
+                            "Estimated Price": [f"${pred:.2f}" for pred in preds_reg]
                         })
                         st.success("Bulk Regression Results:")
                         st.write(result_reg)
 
+        # ---------------------------------------------------------------------
+        # BULK CLUSTERING
+        # ---------------------------------------------------------------------
         with tab3:
             st.markdown("### Bulk Clustering")
             if st.button("Run Bulk Clustering"):
                 with st.spinner("Running clustering predictions..."):
-                    # For clustering, we want all 17 columns
                     if not set(CLUSTERING_COLS).issubset(df.columns):
                         missing_cols = set(CLUSTERING_COLS) - set(df.columns)
                         st.error(f"CSV is missing clustering columns: {missing_cols}")
                     else:
-                        X_clust_bulk = df[CLUSTERING_COLS]
-                        cluster_labels = clustering_model.predict(X_clust_bulk)
+                        X_clust_bulk = df[CLUSTERING_COLS].copy()
+                        # Scale only the matching columns
+                        X_clust_bulk_scaled = scale_subset(clustering_scaler, X_clust_bulk)
+                        cluster_labels = clustering_model.predict(X_clust_bulk_scaled)
                         df["Cluster"] = cluster_labels
                         st.success("Bulk Clustering Results (first 10 rows):")
                         st.write(df[["session_id", "Cluster"]].head(10))
+
+                        # Simple scatter plot example
                         fig, ax = plt.subplots()
                         sns.scatterplot(
                             x=df["max_page_reached"], 
@@ -346,3 +458,10 @@ elif input_mode == "📂 Upload CSV Data":
                         )
                         ax.set_title("Clustering Visualization")
                         st.pyplot(fig)
+
+                # ---- Add Pie Chart ----
+                cluster_counts = df["Cluster"].value_counts()
+                fig2, ax2 = plt.subplots()
+                ax2.pie(cluster_counts, labels=cluster_counts.index, autopct="%1.1f%%", startangle=90)
+                ax2.set_title("Cluster Distribution")
+                st.pyplot(fig2)
