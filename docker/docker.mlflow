@@ -1,0 +1,19 @@
+# Dockerfile.mlflow
+
+# Use an official lightweight Python image as the base image
+FROM python:3.12.2-slim
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Install MLflow
+RUN pip install --no-cache-dir mlflow
+
+# Create the directory for MLflow runs (artifacts and metadata)
+RUN mkdir -p /app/mlruns
+
+# Expose the port for MLflow (default is 5000)
+EXPOSE 5000
+
+# Command to run the MLflow Tracking Server, using /app/mlruns for both backend store and artifact root.
+CMD ["mlflow", "server", "--backend-store-uri", "file:///app/mlruns", "--default-artifact-root", "file:///app/mlruns", "--host", "0.0.0.0", "--port", "5000"]

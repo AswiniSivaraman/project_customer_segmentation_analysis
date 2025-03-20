@@ -1,0 +1,21 @@
+# Use an official lightweight Python image as the base image
+FROM python:3.12.2-slim
+
+# Set the working directory in the container
+WORKDIR /app
+
+# Copy the requirements file to leverage Docker cache
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the entire project into the container
+COPY . /app
+
+# Expose the port that Streamlit uses (default is 8501)
+EXPOSE 8501
+
+
+# Command to run the Streamlit app; adjust the path if main.py is in a subfolder
+CMD ["streamlit", "run", "main.py", "--server.port=8501", "--server.address=0.0.0.0"]
