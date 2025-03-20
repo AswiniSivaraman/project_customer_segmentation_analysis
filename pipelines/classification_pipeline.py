@@ -7,6 +7,8 @@ from steps.clean_data import preprocessing_data
 from steps.feature_engineering import apply_feature_engineering
 from steps.feature_selection import select_feature_classification
 from steps.transforming_data import scale_features, balance_train_data
+from steps.cluster_column import add_cluster_column
+from steps.rfe_feature_selection import apply_rfe
 from steps.train_model import train_classification
 from steps.evaluate_model import evaluate_classification_step
 from steps.best_model import select_best_classification_model
@@ -42,7 +44,7 @@ def classification_pipeline(train_data_path: str, test_data_path: str):
             print("Data fetched successfully!")
 
             # Step 2: Data Preprocess
-            df_train_cleaned, df_test_cleaned = preprocessing_data(df_train, df_test, cat_cols, columns, "support")
+            df_train_cleaned, df_test_cleaned = preprocessing_data(df_train, df_test, cat_cols, columns, "support", "classification")
             print("Data Preprocessed")
 
             # Step 3: Feature Selection
@@ -50,19 +52,29 @@ def classification_pipeline(train_data_path: str, test_data_path: str):
             print("Feature selection completed")
 
             # Step 4: Scale & Balance Data
-            train_scaled, test_scaled = scale_features(df_train_cleaned, df_test_cleaned, numerical_cols=selected_features, target_column="purchase_completed", is_target_there=True)
-            X_train_balanced, y_train_balanced = balance_train_data(train_scaled, target_col="purchase_completed", method="smote")
+            train_scaled, test_scaled, feature_names = scale_features(df_train_cleaned, df_test_cleaned, numerical_cols=selected_features, target_column="purchase_completed", is_target_there=True, pipeline_type="classification")
+            
+            # Step 5: Add New Feature called "cluster"
+            df_train_final, df_test_final = add_cluster_column(train_scaled, test_scaled, feature_names)
+            print("New cluster column added")
+
+            # Step 6: Apply RFE method to select the feature to train the model
+            train_rfe, test_rfe, rfe_features = apply_rfe(df_train_final, df_test_final, target_column='purchase_completed', n_features=9, estimator='classification')
+            print("RFE applied")
+            
+            # Step 7: Apply "smote" Method to Balance the Data
+            X_train_balanced, y_train_balanced = balance_train_data(train_rfe, target_col="purchase_completed", method="smote")
             print("Data scaled and balanced")
 
-            # Step 5: Train Model
+            # Step 8: Train Model
             trained_classification_models = train_classification(X_train_balanced, y_train_balanced)
             print("Model trained")
 
-            # Step 6: Evaluate Model
-            classification_eval_df = evaluate_classification_step(test_scaled, target_column="purchase_completed", dependency=trained_classification_models) 
+            # Step 9: Evaluate Model
+            classification_eval_df = evaluate_classification_step(test_rfe, target_column="purchase_completed", dependency=trained_classification_models) 
             print("Model evaluation completed")
 
-            # Step 7: Select Best Model
+            # Step 10: Select Best Model
             best_classification_model, classification_metrics = select_best_classification_model(classification_eval_df)
             print("Best model selected")
 

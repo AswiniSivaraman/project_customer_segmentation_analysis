@@ -42,7 +42,7 @@ def clustering_pipeline(train_data_path: str, test_data_path: str):
             print("Data fetched successfully!")
 
             # Step 2: Data Preprocess
-            df_train_cleaned, df_test_cleaned = preprocessing_data(df_train, df_test, cat_cols, columns, "support")
+            df_train_cleaned, df_test_cleaned = preprocessing_data(df_train, df_test, cat_cols, columns, "support", "clustering")
             print("Data Preprocessed")
 
             # Step 3: Feature Selection
@@ -51,7 +51,7 @@ def clustering_pipeline(train_data_path: str, test_data_path: str):
             print("Feature selection completed")
 
             # Step 4: Scale Data
-            train_scaled, test_scaled = scale_features(df_selected_train, df_selected_test, numerical_cols=train_selected_columns, target_column="None", is_target_there=False)
+            train_scaled, test_scaled, feature_names = scale_features(df_selected_train, df_selected_test, numerical_cols=train_selected_columns, target_column="None", is_target_there=False, pipeline_type="clustering")
             print("Data scaled")
 
             # Step 5: Train Model

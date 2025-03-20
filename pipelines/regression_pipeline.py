@@ -7,6 +7,8 @@ from steps.clean_data import preprocessing_data
 from steps.feature_engineering import apply_feature_engineering
 from steps.feature_selection import select_feature_regression
 from steps.transforming_data import scale_features
+from steps.cluster_column import add_cluster_column
+from steps.rfe_feature_selection import apply_rfe
 from steps.train_model import train_regression
 from steps.evaluate_model import evaluate_regression_step
 from steps.best_model import select_best_regression_model
@@ -42,7 +44,7 @@ def regression_pipeline(train_data_path: str, test_data_path: str):
             print("Data fetched successfully!")
 
             # Step 2: Data Preprocess
-            df_train_cleaned, df_test_cleaned = preprocessing_data(df_train, df_test, cat_cols, columns, "support")
+            df_train_cleaned, df_test_cleaned = preprocessing_data(df_train, df_test, cat_cols, columns, "support", "regression")
             print("Data Preprocessed")
 
             # Step 3: Feature Selection
@@ -50,18 +52,26 @@ def regression_pipeline(train_data_path: str, test_data_path: str):
             print("Feature selection completed")
 
             # Step 4: Scale Data (Pass Target Column to Exclude from Scaling)
-            train_scaled, test_scaled = scale_features(df_train_cleaned, df_test_cleaned, numerical_cols=selected_features, target_column="price", is_target_there=True)
+            train_scaled, test_scaled, feature_names = scale_features(df_train_cleaned, df_test_cleaned, numerical_cols=selected_features, target_column="price", is_target_there=True, pipeline_type="regression")
             print("Data scaled")
 
-            # Step 5: Train Model (Pass Entire Scaled Data & Target Column Name)
-            trained_regression_models = train_regression(train_scaled, target_col="price") 
+            # Step 5: Add New Feature called "cluster"
+            df_train_final, df_test_final = add_cluster_column(train_scaled, test_scaled, feature_names)
+            print("New cluster column added")
+
+            # Step 6: Apply RFE method to select the feature to train the model
+            train_rfe, test_rfe, rfe_features = apply_rfe(df_train_final, df_test_final, target_column='price', n_features=11, estimator='regression')
+            print("RFE applied")
+
+            # Step 7: Train Model (Pass Entire Scaled Data & Target Column Name)
+            trained_regression_models = train_regression(train_rfe, target_col="price") 
             print("Model trained")
 
-            # Step 6: Evaluate Model
-            regression_eval_df = evaluate_regression_step(test_scaled, target_column="price", dependency=trained_regression_models) 
+            # Step 8: Evaluate Model
+            regression_eval_df = evaluate_regression_step(test_rfe, target_column="price", dependency=trained_regression_models) 
             print("Model evaluation completed")
 
-            # Step 7: Select Best Model
+            # Step 9: Select Best Model
             best_regression_model, regression_metrics = select_best_regression_model(regression_eval_df)
             print("Best model selected")
 
