@@ -12,6 +12,7 @@ Customer Conversion Analysis for Online Shopping Using Clickstream Data is an en
 - [Command-line Instructions](#command-line-instructions)
 - [Technical Details](#technical-details)
 - [Dependencies](#dependencies)
+- [Project Flow Diagram](#project-flow-diagram)
 
 ## Overview
 
@@ -139,6 +140,11 @@ streamlit run main.py
 | streamlit          | For building the interactive web application.                      |
 
 Refer to **`requirements.txt`** for the complete list of dependencies.
+
+### Project Flow Diagram
+
+![image](https://github.com/user-attachments/assets/aad00c33-9a72-456f-8b45-63150ed20f72)
+
 
 ### **"To know more about this project refer `project_document.docx`."**
 
