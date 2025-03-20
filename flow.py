@@ -1,4 +1,5 @@
 """
+
 Project_Clickstream_Conversion/
 │
 ├── .zen/                              # ZenML configuration directory
@@ -15,7 +16,8 @@ Project_Clickstream_Conversion/
 │   ├── bulk_prediction_data.csv
 │   ├── data description.txt
 │   ├── test_data.csv
-│   └── train_data.csv
+│   ├── train_data.csv
+│   └── sample_test_data.csv            
 │
 ├── docker/                             # Docker-related configurations
 │   ├── mlruns/
@@ -28,9 +30,11 @@ Project_Clickstream_Conversion/
 ├── documents/                          # Contains documentation files
 │   └── Errors.docx
 │
-├── images/                             # Contains images for Streamlit UI
+├── images/                             # Contains images for Streamlit UI and Project Documentation
 │   ├── bg_image.png
-│   └── logo.png
+│   ├── logo.png
+│   ├── flow.png                       
+│   └── project_flow.png               
 │
 ├── mlruns/                             # MLflow experiment tracking runs
 │   ├── .trash/
@@ -109,7 +113,8 @@ Project_Clickstream_Conversion/
 │   ├── ingest_data.py
 │   ├── rfe_feature_selection.py
 │   ├── train_model.py
-│   └── transforming_data.py
+│   ├── transforming_data.py
+│   └── cluster_column.py              
 │
 ├── support/                            # Preprocessed data mappings and encoders
 │   ├── add_ons/
@@ -122,28 +127,29 @@ Project_Clickstream_Conversion/
 │   │   ├── regression_page2_clothing_model_mapping.pkl
 │   │   ├── regression_purchase_completed_mapping.pkl
 │   │   ├── regression_season_mapping.pkl
-│   │   ├── classification_encoded_mappings.pkl
-│   │   ├── classification_standard_scaler.pkl
-│   │   ├── clustering_encoded_mappings.pkl
-│   │   ├── clustering_standard_scaler.pkl
-│   │   ├── regression_encoded_mappings.pkl
-│   │   └── regression_standard_scaler.pkl
+│   ├── classification_encoded_mappings.pkl
+│   ├── classification_standard_scaler.pkl
+│   ├── clustering_encoded_mappings.pkl
+│   ├── clustering_standard_scaler.pkl
+│   ├── regression_encoded_mappings.pkl
+│   └── regression_standard_scaler.pkl
 │
-├── utils/                              # Utility and helper functions
+├── utils/                               # Utility and helper functions
 │   ├── __pycache__/
 │   ├── __init__.py
 │   ├── data_transformation.py
 │   ├── encoding_values.py
 │   ├── get_result.py
 │   ├── helper_func.py
-│   └── rfe_selection.py
+│   ├── rfe_selection.py
+│   └── bulk_data_cleaning_streamlit.py   # Added bulk_data_cleaning_streamlit.py
 │
-├── docker-compose.yml                   # Docker configuration
+├── docker-compose.yml                    # Docker configuration
 ├── entrypoint.sh                         # Shell script for container entry
 ├── flow.py                               # Flow execution script
 ├── main_pipeline.py                      # Main pipeline execution script
 ├── main.py                               # Streamlit application main script
 ├── project_document.docx                 # Project documentation
-├── requirements.txt                       # Python dependencies
-└── test.ipynb                             # Jupyter notebook for testing
+└── requirements.txt                      # Python dependencies
+
 """
