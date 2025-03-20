@@ -76,6 +76,7 @@ def evaluate_classification_step(df: pd.DataFrame, target_column: str, dependenc
         results_df.rename(columns={"index": "Model"}, inplace=True)
 
         logging.info("Classification model evaluation completed.")
+        print(results_df)
         return results_df
 
     except Exception as e:
@@ -110,6 +111,7 @@ def evaluate_clustering_step(df: pd.DataFrame, dependency: dict) -> pd.DataFrame
         results_df.rename(columns={"index": "Model"}, inplace=True)
 
         logging.info("Clustering model evaluation completed.")
+        print(results_df)
         return results_df
 
     except Exception as e:

@@ -6,7 +6,7 @@ from steps.feature_engineering import apply_feature_engineering
 from typing import Tuple
 
 @step
-def preprocessing_data(df_train: pd.DataFrame, df_test: pd.DataFrame, cat_columns: list, columns: list, save_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def preprocessing_data(df_train: pd.DataFrame, df_test: pd.DataFrame, cat_columns: list, columns: list, save_path: str, pipeline_type:str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     ZenML Step to preprocess the dataset:
     - Cleans the data.
@@ -18,6 +18,7 @@ def preprocessing_data(df_train: pd.DataFrame, df_test: pd.DataFrame, cat_column
         df_test (pd.DataFrame): Raw testing dataset.
         cat_columns (list): List of categorical columns to encode.
         save_path (str): Path to save encoded mappings.
+        pipeline (str): Name of the pipeline (e.g., 'regression', 'classification', 'clustering').
 
     Returns:
         Tuple[pd.DataFrame, pd.DataFrame]: Cleaned and preprocessed training and testing datasets.
@@ -36,7 +37,7 @@ def preprocessing_data(df_train: pd.DataFrame, df_test: pd.DataFrame, cat_column
         logging.info("Feature engineering applied.")
 
         # Encode categorical features (Updated to handle train & test separately)
-        df_train_encoded, df_test_encoded = encode_data_step(df_train_featured, df_test_featured, cat_columns, save_path)
+        df_train_encoded, df_test_encoded = encode_data_step(df_train_featured, df_test_featured, cat_columns, save_path, pipeline_name=pipeline_type)
         logging.info(f"Categorical columns encoded: {columns}")
 
         return df_train_encoded, df_test_encoded

@@ -6,7 +6,7 @@ from typing import Tuple
 
 
 @step
-def scale_features(train_df: pd.DataFrame, test_df: pd.DataFrame, numerical_cols: list, target_column: str, is_target_there: bool) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def scale_features(train_df: pd.DataFrame, test_df: pd.DataFrame, numerical_cols: list, target_column: str, is_target_there: bool, pipeline_type: str) -> Tuple[pd.DataFrame, pd.DataFrame, list]:
     """
     ZenML step to apply Standard Scaling on both train & test datasets using train data to fit the scaler.
 
@@ -15,15 +15,19 @@ def scale_features(train_df: pd.DataFrame, test_df: pd.DataFrame, numerical_cols
         test_df (pd.DataFrame): The test dataset.
         numerical_cols (list): List of numerical columns to scale.
         target_column (str): The target column (excluded from scaling).
+        pipeline (str): Name of the pipeline (e.g., 'regression', 'classification', 'clustering').
 
     Returns:
         Tuple[pd.DataFrame, pd.DataFrame]: Scaled training and test datasets (target remains unchanged).
     """
     try:
         logging.info("Starting Standard Scaling process...")
-        train_scaled, test_scaled = apply_standard_scaling(train_df, test_df, numerical_cols, target_column, is_target_there)
+        train_scaled, test_scaled = apply_standard_scaling(train_df, test_df, numerical_cols, target_column, is_target_there, pipeline_type)
+        feature_list = list(train_scaled.columns)
+        print(f"feature_list data type -- >{type(feature_list)}")
+        print(f"{pipeline_type} scaled columns --> {feature_list}")
         logging.info("Standard Scaling successfully applied on train & test data.")
-        return train_scaled, test_scaled
+        return train_scaled, test_scaled, feature_list
 
     except Exception as e:
         logging.error(f"Error in feature scaling using StandardScaler step: {e}")

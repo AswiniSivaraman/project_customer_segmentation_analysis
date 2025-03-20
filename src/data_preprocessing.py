@@ -27,7 +27,7 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
         print(df.duplicated().sum())
 
         # Drop the unnecessary columns
-        cols_to_drop = ["year"]
+        cols_to_drop = ['year']
         df = df.drop(cols_to_drop, axis=1)
         print('Columns dropped:', cols_to_drop)
 
@@ -40,55 +40,53 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
     
 
 
-def encode_data(df: pd.DataFrame, col_name: str, is_train: bool, save_path: str) -> Tuple[pd.DataFrame, dict]:
+def encode_data(df: pd.DataFrame, col_name: str, is_train: bool, save_path: str, pipeline: str) -> Tuple[pd.DataFrame, dict]:
     """
-    Encode categorical data using LabelEncoder. Save the encoder when processing training data,
-    and load & apply it for test data.
+    Encode categorical data using LabelEncoder. Only return encoded data and mapping,
+    as mappings are handled separately in save_encoded_mappings.
 
     Args:
     df (pd.DataFrame): DataFrame to encode.
     col_name (str): Column name to encode.
     is_train (bool): Flag indicating if data is training data.
     save_path (str): Directory to save the encoder file.
+    pipeline (str): Name of the pipeline (e.g., 'regression', 'classification', 'clustering').
 
     Returns:
     Tuple[pd.DataFrame, dict]: DataFrame with encoded column and mapping dictionary.
     """
     try:
-        encoder_path = os.path.join(save_path, f"{col_name}_encoder.pkl")
-        os.makedirs(save_path, exist_ok=True)  # Ensure directory exists
-
+        logging.info(f"Encoding column: {col_name} in pipeline: {pipeline}")
+        
+        add_ons_path = os.path.join(save_path, "add_ons")
+        os.makedirs(add_ons_path, exist_ok=True)  # Ensure add_ons directory exists
+        mapping_path = os.path.join(add_ons_path, f"{pipeline}_{col_name}_mapping.pkl")
+        
         if is_train:
-            logging.info(f"Fitting LabelEncoder for {col_name} and saving to {encoder_path}")
             le = LabelEncoder()
             df[col_name] = le.fit_transform(df[col_name])
-
-            # Save the encoder object
-            with open(encoder_path, "wb") as file:
-                pickle.dump(le, file)
-
+            mapping = dict(zip(le.classes_, range(len(le.classes_))))
+            
+            # Save the mapping
+            with open(mapping_path, "wb") as file:
+                pickle.dump(mapping, file)
+            logging.info(f"Label Encoding Mapping for {col_name} saved at {mapping_path}")
         else:
-            if not os.path.exists(encoder_path):
-                raise FileNotFoundError(f"Encoder file for {col_name} not found: {encoder_path}")
-
-            logging.info(f"Loading LabelEncoder for {col_name} from {encoder_path}")
-            with open(encoder_path, "rb") as file:
-                le = pickle.load(file)
-
-            # df[col_name] = le.transform(df[col_name])
-            df[col_name] = df[col_name].apply(lambda x: le.transform([x])[0] if x in le.classes_ else -1)
-
-        # Create mapping dictionary
-        mapping = dict(zip(le.classes_, range(len(le.classes_))))
-        logging.info(f"Label Encoding Mapping for {col_name}: {mapping}")
-
+            if not os.path.exists(mapping_path):
+                raise FileNotFoundError(f"Mapping file for {col_name} not found: {mapping_path}")
+            
+            logging.info(f"Loading Label Encoding Mapping for {col_name} from {mapping_path}")
+            with open(mapping_path, "rb") as file:
+                mapping = pickle.load(file)
+            
+            df[col_name] = df[col_name].apply(lambda x: mapping[x] if x in mapping else -1)
+        
         return df, mapping
-
+    
     except Exception as e:
-        logging.error(f"Error occurred when encoding {col_name}: {e}")
+        logging.error(f"Error occurred when encoding {col_name} in {pipeline}: {e}")
         logging.exception("Full Exception Traceback:")
         raise e
-
 
 
 

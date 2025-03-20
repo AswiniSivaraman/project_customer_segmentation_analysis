@@ -28,7 +28,7 @@ def clean_data_step(df: pd.DataFrame) -> pd.DataFrame:
     
 
 @step
-def encode_data_step(df_train: pd.DataFrame, df_test: pd.DataFrame, categorical_columns: list, save_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def encode_data_step(df_train: pd.DataFrame, df_test: pd.DataFrame, categorical_columns: list, save_path: str, pipeline_name:str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     ZenML Step to encode categorical features for both train and test data.
     
@@ -37,6 +37,7 @@ def encode_data_step(df_train: pd.DataFrame, df_test: pd.DataFrame, categorical_
         df_test (pd.DataFrame): Testing dataset.
         categorical_columns (list): List of categorical columns to encode.
         save_path (str): Path to save encoded mappings.
+        pipeline (str): Name of the pipeline (e.g., 'regression', 'classification', 'clustering').
 
     Returns:
         Tuple[pd.DataFrame, pd.DataFrame]: Encoded training and test datasets.
@@ -47,11 +48,11 @@ def encode_data_step(df_train: pd.DataFrame, df_test: pd.DataFrame, categorical_
 
         # Apply encoding to both train and test data
         for col in categorical_columns:
-            df_train, mapping = encode_data(df_train, col, is_train=True, save_path=save_path)  # Fit & Save Encoder
-            df_test, _ = encode_data(df_test, col, is_train=False, save_path=save_path)  # Load & Transform Test Data
+            df_train, mapping = encode_data(df_train, col, is_train=True, save_path=save_path, pipeline = pipeline_name)  # Fit & Save Encoder
+            df_test, _ = encode_data(df_test, col, is_train=False, save_path=save_path, pipeline = pipeline_name)  # Load & Transform Test Data
             encoding_mappings[col] = mapping
 
-        save_encoded_mappings(encoding_mappings, save_path)
+        save_encoded_mappings(encoding_mappings, pipeline_name, save_path)
         logging.info(f"Categorical columns encoded: {categorical_columns}")
 
         return df_train, df_test

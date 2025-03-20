@@ -22,6 +22,7 @@ def ingest_train_data(path: str) -> pd.DataFrame:
         
         logging.info(f'Data ingestion successful: {df.shape[0]} rows, {df.shape[1]} columns.')
         print(f'Data ingestion successful: {df.shape[0]} rows, {df.shape[1]} columns.')
+        print(f"Initial column name --> {df.columns}")
         return df
     except Exception as e:
         logging.error(f"Error during data ingestion: {str(e)}")

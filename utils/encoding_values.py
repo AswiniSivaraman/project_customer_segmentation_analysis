@@ -5,7 +5,7 @@ import pickle
 
 def get_pre_encoded_mappings() -> dict:
     """
-    Returns the predefined mappings for pre-encoded columns.
+    Returns the predefined mappings for pre-encoded categorical columns.
     """
     # Predefined mappings for already encoded categorical columns
     pre_encoded_mappings = {
@@ -22,6 +22,10 @@ def get_pre_encoded_mappings() -> dict:
             41: "United Kingdom", 42: "USA", 43: "biz (*.biz)", 44: "com (*.com)",
             45: "int (*.int)", 46: "net (*.net)", 47: "org (*.org)"
         },
+        "page_1_main_category": {
+            1: "trousers", 2: "skirts", 3: "blouses", 4: "sale"
+        },
+        "page_2_clothing_model": {i: f"product_{i}" for i in range(1, 218)},
         "colour": {
             1: "beige", 2: "black", 3: "blue", 4: "brown", 5: "burgundy", 6: "gray",
             7: "green", 8: "navy blue", 9: "of many colors", 10: "olive", 11: "pink",
@@ -33,6 +37,7 @@ def get_pre_encoded_mappings() -> dict:
         },
         "model_photography": {1: "en face", 2: "profile"},
         "price_2": {1: "yes", 2: "no"},
+        "page": {i: f"Page {i}" for i in range(1, 6)}
     }
     
     logging.info("Loaded predefined encoded mappings")
@@ -40,7 +45,7 @@ def get_pre_encoded_mappings() -> dict:
 
 
 
-def save_encoded_mappings(mapping_dict: dict, folder_path: str = "support") -> str:
+def save_encoded_mappings(mapping_dict: dict, pipeline: str, folder_path: str = "support") -> str:
     """
     Saves the encoded column mappings as a .pkl file inside the `support/` folder.
 
@@ -53,7 +58,7 @@ def save_encoded_mappings(mapping_dict: dict, folder_path: str = "support") -> s
     """
     try:
         os.makedirs(folder_path, exist_ok=True)  # Ensure `support/` directory exists
-        file_path = os.path.join(folder_path, "encoded_mappings.pkl")
+        file_path = os.path.join(folder_path, f"{pipeline}_encoded_mappings.pkl")
 
         with open(file_path, "wb") as file:
             pickle.dump(mapping_dict, file)
