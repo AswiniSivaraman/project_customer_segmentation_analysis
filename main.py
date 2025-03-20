@@ -1,26 +1,25 @@
-import logging
 import pickle
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
+from utils.bulk_data_cleaning_streamlit import process_bulk_data  
+import io
 import base64
-import os
 import time
 
-# -------------------------
-# 0) LOAD BEST MODEL NAMES
-# -------------------------
+# 1) Load the best model names
+
 best_models_csv = "models/best_models/best_models_file.csv"
 best_models_df = pd.read_csv(best_models_csv)
 
 class_model_name = best_models_df.loc[best_models_df['Model Type'] == 'classification', 'Best Model'].values[0]
 reg_model_name = best_models_df.loc[best_models_df['Model Type'] == 'regression', 'Best Model'].values[0]
 clust_model_name = best_models_df.loc[best_models_df['Model Type'] == 'clustering', 'Best Model'].values[0]
+clust_model_name = "KMeans"
 
-# -------------------------
-# 1) LOAD THE .PKL MODELS
-# -------------------------
+
+# 2) Load the .pkl models
+
 classification_model_path = f"models/classification_models/{class_model_name}.pkl"
 regression_model_path = f"models/regression_models/{reg_model_name}.pkl"
 clustering_model_path = f"models/clustering_models/{clust_model_name}.pkl"
@@ -32,17 +31,19 @@ with open(regression_model_path, "rb") as f:
 with open(clustering_model_path, "rb") as f:
     clustering_model = pickle.load(f)
 
-# -------------------------
-# 2) LOAD SEPARATE ENCODERS
-# -------------------------
+
+# 3) Load seperate encoders
+
 with open("support/classification_encoded_mappings.pkl", "rb") as f:
     classification_label_enc = pickle.load(f)
 with open("support/regression_encoded_mappings.pkl", "rb") as f:
     regression_label_enc = pickle.load(f)
+with open("support/clustering_encoded_mappings.pkl", "rb") as f:
+    clustering_label_enc = pickle.load(f)
 
-# -------------------------
-# 2b) LOAD STANDARD SCALERS
-# -------------------------
+
+# 4) Load seperate standard scalars
+
 with open("support/classification_standard_scaler.pkl", "rb") as f:
     classification_scaler = pickle.load(f)
 with open("support/regression_standard_scaler.pkl", "rb") as f:
@@ -50,16 +51,29 @@ with open("support/regression_standard_scaler.pkl", "rb") as f:
 with open("support/clustering_standard_scaler.pkl", "rb") as f:
     clustering_scaler = pickle.load(f)
 
-# -------------------------
-# Helper Function for Partial Scaling
-# -------------------------
+
+# Helper Functions
+
+def label_to_code_strict(label_dict, chosen_label, field_name):
+    """
+    Convert the displayed label (chosen_label) back to its original code (key).
+    For fields like 'page2_clothing_model', if the chosen label is one of the dictionary keys,
+    then return its corresponding numeric code.
+    Otherwise, iterate over items: if a dictionary value matches the chosen label, return its key.
+    If no match is found, return the chosen label.
+    """
+    if chosen_label in label_dict:
+        return label_dict[chosen_label]
+    for k, v in label_dict.items():
+        if v == chosen_label:
+            return k
+    return chosen_label
+
 def scale_subset(scaler, df_subset):
     """
     For each column in df_subset, if the column was used during scaler training
-    (i.e. exists in scaler.feature_names_in_), apply standard scaling using the 
-    stored mean and scale. Otherwise, leave the column unchanged.
-    
-    Returns a DataFrame with all columns (scaled or original) in the same order.
+    (i.e. exists in scaler.feature_names_in_), apply standard scaling using the stored mean and scale.
+    Otherwise, leave the column unchanged.
     """
     train_cols = scaler.feature_names_in_
     transformed = {}
@@ -73,9 +87,21 @@ def scale_subset(scaler, df_subset):
             transformed[col] = df_subset[col]
     return pd.DataFrame(transformed, index=df_subset.index)
 
-# -------------------------
-# 3) STREAMLIT SETUP & BACKGROUND
-# -------------------------
+
+# Manual mapping dictionaries for price_2 and page
+
+price2_manual_map = {"yes": 1, "no": 2}
+page_manual_map = {"Page 1": 1, "Page 2": 2, "Page 3": 3, "Page 4": 4, "Page 5": 5}
+
+
+# Mappings for Non-Encoded Fields
+
+weekend_map = {"Yes": 1, "No": 0}
+season_map = {"Autumn": 0, "Summer": 1}
+
+
+# 5) Streamlit setup & background setup
+
 st.set_page_config(page_title="Clickstream Customer Conversion Analysis", layout="wide")
 
 def set_background_in_main_area(image_file):
@@ -120,348 +146,606 @@ st.markdown(
     Welcome to the interactive web application for **Customer Conversion Analysis**.
     
     **How to Use:**
-    1. **Manual Input**: Provide individual values for **Purchase Prediction** or **Price Estimation**.
-       - **Purchase Prediction** determines if a customer is likely to make a purchase.
-       - **Price Estimation** provides an estimated price value.
-    2. **CSV Upload**: Upload your bulk data. A quick preview is shown, then you can run:
-       - **Classification**: Shows whether each customer will purchase or not.
-       - **Regression**: Estimates price in dollars.
-       - **Clustering**: Groups similar customers and displays a scatter plot.
-    3. View the results directly in this app, including tables and visualizations.
+    1. **Manual Input**: Provide individual values for:
+       - **Clustering**: features except month/day are shown (they're set internally).
+       - **Regression**: all features except the target 'price'.
+       - **Classification**: all features except the target 'purchase_completed'.
+    2. **CSV Upload**: Upload your bulk data. The same pipeline is applied for clustering, regression, and classification.
+    3. View results directly in this app.
     """
 )
 
-# -------------------------
-# 4) HELPER DICTS FOR NON-ENCODED FIELDS
-# -------------------------
-month_map = {
-    "January": 1, "February": 2, "March": 3, "April": 4, "May": 5, "June": 6,
-    "July": 7, "August": 8, "September": 9, "October": 10, "November": 11, "December": 12
-}
-weekend_map = {"Yes": 1, "No": 0}
-
-def label_to_code(label_dict, chosen_label, use_keys=False):
-    """
-    Convert a displayed label (value) back to its original code (key)
-    or vice versa, depending on use_keys.
-    """
-    if use_keys:
-        return label_dict.get(chosen_label, 0)
-    for k, v in label_dict.items():
-        if v == chosen_label:
-            return k
-    return 0
-
-# -----------------------------------------
-# FEATURE LISTS (Ensure spelling matches)
-# -----------------------------------------
-CLASSIFICATION_COLS = [
-    'month','order','session_id','page1_main_category','page2_clothing_model',
-    'location','price','page','max_page_reached'
-]
-# For regression, remove 'price' because it is the target to be predicted
-REGRESSION_COLS = [
-    'country','session_id','page1_main_category','page2_clothing_model',
-    'colour','location','model_photography','price_2','page','is_weekend',
-    'max_page_reached'
-]
-CLUSTERING_COLS = [
-    'month','day','order','country','session_id','page1_main_category',
-    'page2_clothing_model','colour','location','model_photography','price',
-    'price_2','page','is_weekend','season','total_clicks','max_page_reached'
-]
-
-# If the CSV has slightly different column names, define a rename dictionary:
+# Rename dictionary for CSV if needed
 RENAME_DICT = {
     "page_1_main_category": "page1_main_category",
     "page_2_clothing_model": "page2_clothing_model"
 }
 
-# -------------------------
-# 5) STREAMLIT UI
-# -------------------------
+
+# 6) Streamlit ui
+
 input_mode = st.radio("Choose Input Method:", ["🖊️ Manual Input", "📂 Upload CSV Data"], index=0)
 
-# =============================================================================
-#                         MANUAL INPUT MODE
-# =============================================================================
+# ==================================================================================================================================================
+#                                                            Manual Input Mode
+# ==================================================================================================================================================
 if input_mode == "🖊️ Manual Input":
-    st.subheader("Enter Customer Browsing Details")
-    tab1, tab2 = st.tabs(["🛍️ Purchase Prediction", "💰 Price Estimation"])
+    st.subheader("Enter Customer Details Manually")
+    tab_clust, tab_reg, tab_class = st.tabs(["🔍 Customer Segmentation", "💰 Price Estimation", "🛍️ Purchase Prediction"])
 
-    # -------------------------------------------------------------------------
-    # TAB 1: PURCHASE PREDICTION (CLASSIFICATION)
-    # -------------------------------------------------------------------------
-    with tab1:
-        st.markdown("### 🛍️ Purchase Prediction (Classification)")
-        col1, col2, col3 = st.columns(3)
-        col4, col5, col6 = st.columns(3)
-        col7, col8, col9 = st.columns(3)
 
-        with col1:
-            month_pred = st.selectbox("📆 Month", list(month_map.keys()))
-        with col2:
-            order_pred = st.number_input("📌 Sequence of Clicks", min_value=1, value=1)
-        with col3:
-            session_id_pred = st.text_input("🆔 Session ID")
+    # Tab --> Clustering
 
-        with col4:
-            page1_dict = classification_label_enc["page_1_main_category"]
-            page1_labels = list(page1_dict.values())
-            chosen_page1_label = st.selectbox("📁 Main Product Category", page1_labels)
-        with col5:
-            page2_dict = classification_label_enc["page2_clothing_model"]
-            page2_labels = list(page2_dict.keys())
-            chosen_page2_label = st.selectbox("👕 Clothing Model", page2_labels)
-        with col6:
-            loc_dict = classification_label_enc["location"]
-            loc_labels = list(loc_dict.values())
-            chosen_loc_label = st.selectbox("📍 Photo Location", loc_labels)
-        with col7:
-            price_pred = st.number_input("💲 Price", min_value=1, value=50)
-        with col8:
-            page_dict = classification_label_enc["page"]
-            page_labels = list(page_dict.values())
-            chosen_page_label = st.selectbox("📄 Page", page_labels)
-        with col9:
-            max_page_reached_pred = st.slider("📄 Max Page Reached", 1, 5, 2)
+    with tab_clust:
+        st.markdown("### Customer Segmentation...")
+        # Hard-code month=1, day=5 internally
+        fixed_month_val = 1
+        fixed_day_val = 5
 
-        if st.button("🚀 Predict Purchase Conversion", use_container_width=True):
-            # Convert all labels/inputs to numeric codes
-            month_val = month_map[month_pred]
-            session_id_val = int(session_id_pred) if session_id_pred.isdigit() else 0
-            page1_code = label_to_code(page1_dict, chosen_page1_label)
-            page2_code = label_to_code(page2_dict, chosen_page2_label, use_keys=True)
-            location_code = label_to_code(loc_dict, chosen_loc_label)
-            page_code = label_to_code(page_dict, chosen_page_label)
-
-            # Create a DataFrame for the single input row
-            X_class = pd.DataFrame([{
-                'month': month_val,
-                'order': order_pred,
-                'session_id': session_id_val,
-                'page1_main_category': page1_code,
-                'page2_clothing_model': page2_code,
-                'location': location_code,
-                'price': price_pred,
-                'page': page_code,
-                'max_page_reached': max_page_reached_pred
-            }])
-
-            # Use the helper to scale only the columns in X_class that are in the scaler
-            X_class_scaled = scale_subset(classification_scaler, X_class)
-            # Predict
-            y_pred_class = classification_model.predict(X_class_scaled)
-            if y_pred_class[0] == 1:
-                st.success("This customer WILL make a purchase!")
+        c1, c2 = st.columns(2)
+        with c1:
+            order_val = st.number_input("Sequence of Clicks (Order)", min_value=1, value=1, key="clust_order")
+        with c2:
+            country_dict_clust = clustering_label_enc.get("country", {})
+            if country_dict_clust:
+                country_sel = st.selectbox("Country", list(country_dict_clust.values()), key="clust_country")
             else:
-                st.warning("This customer will NOT make a purchase.")
+                country_sel = st.text_input("Country", key="clust_country_text")
 
-    # -------------------------------------------------------------------------
-    # TAB 2: PRICE ESTIMATION (REGRESSION)
-    #   We now PREDICT "price" as the target. So "price" is not an input.
-    # -------------------------------------------------------------------------
-    with tab2:
-        st.markdown("### 💰 Price Estimation (Regression)")
-        col1, col2, col3 = st.columns(3)
-        col4, col5, col6 = st.columns(3)
-        col7, col8, col9 = st.columns(3)
+        c3, c4 = st.columns(2)
+        with c3:
+            session_id_val = st.text_input("Session ID", key="clust_session_id")
+        with c4:
+            page1_dict_clust = clustering_label_enc.get("page_1_main_category", {})
+            if page1_dict_clust:
+                page1_sel = st.selectbox("Main Product Category", list(page1_dict_clust.values()), key="clust_page1")
+            else:
+                page1_sel = st.text_input("Main Product Category", key="clust_page1_text")
 
-        with col1:
-            country_dict = regression_label_enc["country"]
-            country_labels = list(country_dict.values())
-            chosen_country_label = st.selectbox("Country", country_labels)
-        with col2:
-            session_id_rev = st.text_input("Session ID")
-        with col3:
-            page1_dict_reg = regression_label_enc["page_1_main_category"]
-            page1_labels_reg = list(page1_dict_reg.values())
-            chosen_page1_label_reg = st.selectbox("Main Product Category", page1_labels_reg)
-        with col4:
-            page2_dict_reg = regression_label_enc["page2_clothing_model"]
-            page2_labels_reg = list(page2_dict_reg.keys())
-            chosen_page2_label_reg = st.selectbox("Clothing Model", page2_labels_reg)
-        with col5:
-            colour_dict_reg = regression_label_enc["colour"]
-            colour_labels_reg = list(colour_dict_reg.values())
-            chosen_colour_label_reg = st.selectbox("Colour", colour_labels_reg)
-        with col6:
-            location_dict_reg = regression_label_enc["location"]
-            location_labels_reg = list(location_dict_reg.values())
-            chosen_location_label_reg = st.selectbox("Location", location_labels_reg)
-        with col7:
-            model_photo_dict_reg = regression_label_enc["model_photography"]
-            model_photo_labels_reg = list(model_photo_dict_reg.values())
-            chosen_model_photo_label_reg = st.selectbox("Model Photography", model_photo_labels_reg)
-        with col8:
-            price2_dict_reg = regression_label_enc["price_2"]
-            price2_labels_reg = list(price2_dict_reg.values())
-            chosen_price2_label_reg = st.selectbox("Price Compared to Avg", price2_labels_reg)
-        with col9:
-            page_dict_reg = regression_label_enc["page"]
-            page_labels_reg = list(page_dict_reg.values())
-            chosen_page_label_reg = st.selectbox("Page", page_labels_reg)
+        c5, c6 = st.columns(2)
+        with c5:
+            page2_dict_clust = clustering_label_enc.get("page2_clothing_model", {})
+            if page2_dict_clust:
+                page2_sel = st.selectbox("Clothing Model", list(page2_dict_clust.keys()), key="clust_page2")
+            else:
+                page2_sel = st.text_input("Clothing Model", key="clust_page2_text")
+        with c6:
+            colour_dict_clust = clustering_label_enc.get("colour", {})
+            if colour_dict_clust:
+                colour_sel = st.selectbox("Colour", list(colour_dict_clust.values()), key="clust_colour")
+            else:
+                colour_sel = st.text_input("Colour", key="clust_colour_text")
 
-        last_row_col1, last_row_col2 = st.columns([3,2])
-        with last_row_col1:
-            is_weekend_rev = st.radio("Is Weekend?", ["Yes", "No"])
-            max_page_reached_rev = st.slider("Max Page Reached", 1, 5, 2)
+        c7, c8 = st.columns(2)
+        with c7:
+            location_dict_clust = clustering_label_enc.get("location", {})
+            if location_dict_clust:
+                location_sel = st.selectbox("Location", list(location_dict_clust.values()), key="clust_location")
+            else:
+                location_sel = st.text_input("Location", key="clust_location_text")
+        with c8:
+            model_photo_dict_clust = clustering_label_enc.get("model_photography", {})
+            if model_photo_dict_clust:
+                model_photo_sel = st.selectbox("Model Photography", list(model_photo_dict_clust.values()), key="clust_model_photo")
+            else:
+                model_photo_sel = st.text_input("Model Photography", key="clust_model_photo_text")
 
-        if st.button("Estimate Price", use_container_width=True):
-            session_id_val = int(session_id_rev) if session_id_rev.isdigit() else 0
-            country_code = label_to_code(country_dict, chosen_country_label)
-            page1_code = label_to_code(page1_dict_reg, chosen_page1_label_reg)
-            page2_code = label_to_code(page2_dict_reg, chosen_page2_label_reg, use_keys=True)
-            colour_code = label_to_code(colour_dict_reg, chosen_colour_label_reg)
-            location_code = label_to_code(location_dict_reg, chosen_location_label_reg)
-            model_photo_code = label_to_code(model_photo_dict_reg, chosen_model_photo_label_reg)
-            price_2_code = label_to_code(price2_dict_reg, chosen_price2_label_reg)
-            page_code = label_to_code(page_dict_reg, chosen_page_label_reg)
-            weekend_val = weekend_map[is_weekend_rev]
+        c9, c10 = st.columns(2)
+        with c9:
+            price_val = st.number_input("Price", min_value=1.0, value=50.0, format="%.2f", key="clust_price")
+        with c10:
+            price2_dict_clust = clustering_label_enc.get("price_2", {})
+            if price2_dict_clust:
+                price2_sel = st.selectbox("Price Compared to Avg", list(price2_dict_clust.values()), key="clust_price2")
+            else:
+                price2_sel = st.text_input("Price Compared to Avg", key="clust_price2_text")
 
-            # Create a DataFrame for the single input row
-            X_reg = pd.DataFrame([{
-                'country': country_code,
-                'session_id': session_id_val,
-                'page1_main_category': page1_code,
-                'page2_clothing_model': page2_code,
-                'colour': colour_code,
-                'location': location_code,
-                'model_photography': model_photo_code,
-                'price_2': price_2_code,
-                'page': page_code,
-                'is_weekend': weekend_val,
-                'max_page_reached': max_page_reached_rev
+        c11, c12 = st.columns(2)
+        with c11:
+            page_dict_clust = clustering_label_enc.get("page", {})
+            if page_dict_clust:
+                page_sel = st.selectbox("Page", list(page_dict_clust.values()), key="clust_page")
+            else:
+                page_sel = st.text_input("Page", key="clust_page_text")
+        with c12:
+            purchase_completed_sel = st.selectbox("Purchase Completed (feature)", ["Yes", "No"], key="clust_purchased")
+
+        c13, c14 = st.columns(2)
+        with c13:
+            is_weekend_sel = st.radio("Is Weekend?", ["Yes", "No"], key="clust_is_weekend")
+        with c14:
+            season_sel = st.selectbox("Season", list(season_map.keys()), key="clust_season")
+
+        c15, c16 = st.columns(2)
+        with c15:
+            total_clicks_val = st.number_input("Total Clicks", min_value=0, value=0, key="clust_total_clicks")
+        with c16:
+            max_page_val = st.slider("Max Page Reached", 1, 5, 2, key="clust_max_page_reached")
+
+        if st.button("Predict Customer Segment", key="clust_predict_btn"):
+            month_val = fixed_month_val
+            day_val = fixed_day_val
+
+            try:
+                session_id_final = int(session_id_val)
+            except:
+                session_id_final = 0
+
+            if country_dict_clust:
+                country_final = label_to_code_strict(country_dict_clust, country_sel, "Country")
+            else:
+                country_final = country_sel
+
+            if page1_dict_clust:
+                page1_final = label_to_code_strict(page1_dict_clust, page1_sel, "Main Product Category")
+            else:
+                page1_final = page1_sel
+
+            if page2_dict_clust:
+                page2_final = label_to_code_strict(page2_dict_clust, page2_sel, "Clothing Model")
+            else:
+                page2_final = page2_sel
+
+            if colour_dict_clust:
+                colour_final = label_to_code_strict(colour_dict_clust, colour_sel, "Colour")
+            else:
+                colour_final = colour_sel
+
+            if location_dict_clust:
+                location_final = label_to_code_strict(location_dict_clust, location_sel, "Location")
+            else:
+                location_final = location_sel
+
+            if model_photo_dict_clust:
+                model_photo_final = label_to_code_strict(model_photo_dict_clust, model_photo_sel, "Model Photography")
+            else:
+                model_photo_final = model_photo_sel
+
+            price_final = price_val
+
+            # Manually map price_2 using the manual mapping dictionary
+            price2_final = price2_manual_map.get(str(price2_sel).lower(), price2_sel)
+            # Manually map page using the manual mapping dictionary
+            page_final = page_manual_map.get(page_sel, page_sel)
+
+            purchase_completed_final = 1 if purchase_completed_sel == "Yes" else 0
+            is_weekend_final = weekend_map[is_weekend_sel]
+            season_final = season_map[season_sel]
+            total_clicks_final = total_clicks_val
+            max_page_final = max_page_val
+
+            X_clust_manual = pd.DataFrame([{
+                'month': month_val,
+                'day': day_val,
+                'order': order_val,
+                'country': country_final,
+                'session_id': session_id_final,
+                'page1_main_category': page1_final,
+                'page2_clothing_model': page2_final,
+                'colour': colour_final,
+                'location': location_final,
+                'model_photography': model_photo_final,
+                'price': price_final,
+                'price_2': price2_final,
+                'page': page_final,
+                'purchase_completed': purchase_completed_final,
+                'is_weekend': is_weekend_final,
+                'season': season_final,
+                'total_clicks': total_clicks_final,
+                'max_page_reached': max_page_final
             }])
 
-            # Scale only the columns in X_reg that are in the scaler
-            X_reg_scaled = scale_subset(regression_scaler, X_reg)
-            # Predict (this will be the predicted "price")
+            X_clust_scaled = scale_subset(clustering_scaler, X_clust_manual)
+            cluster_pred = clustering_model.predict(X_clust_scaled)
+            st.session_state.cluster_pred = cluster_pred[0]
+            st.session_state.session_id = session_id_val 
+            st.success(f"Predicted Customer Segment: {st.session_state.cluster_pred}")
+
+
+    # Tab --> Regression
+
+    with tab_reg:
+        st.markdown("### Price Estimation...)")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            cluster_val = st.text_input(
+                "Customer Segment (Cluster)",
+                value=str(st.session_state.cluster_pred) if "cluster_pred" in st.session_state else "",
+                disabled=True
+            )
+        with col2:
+            session_id_reg = st.text_input(
+                "Session ID",
+                value=st.session_state.session_id if "session_id" in st.session_state else "",
+                key="reg_session_id"
+            )
+
+        if "cluster_pred" not in st.session_state:
+            st.info("Please run Clustering first.")
+            predict_enabled_reg = False
+        else:
+            predict_enabled_reg = True
+
+
+        col3, col4 = st.columns(2)
+        with col3:
+            country_dict_reg = regression_label_enc.get("country", {})
+            if country_dict_reg:
+                country_sel_reg = st.selectbox("Country", list(country_dict_reg.values()), key="reg_country")
+            else:
+                country_sel_reg = st.text_input("Country", key="reg_country_text")
+        with col4:
+            page1_dict_reg = regression_label_enc.get("page_1_main_category", {})
+            if page1_dict_reg:
+                page1_sel_reg = st.selectbox("Main Product Category", list(page1_dict_reg.values()), key="reg_page1")
+            else:
+                page1_sel_reg = st.text_input("Main Product Category", key="reg_page1_text")
+
+
+
+        col5, col6 = st.columns(2)
+        with col5:
+            page2_dict_reg = regression_label_enc.get("page2_clothing_model", {})
+            if page2_dict_reg:
+                page2_sel_reg = st.selectbox("Clothing Model", list(page2_dict_reg.keys()), key="reg_page2")
+            else:
+                page2_sel_reg = st.text_input("Clothing Model", key="reg_page2_text")
+        with col6:
+            colour_dict_reg = regression_label_enc.get("colour", {})
+            if colour_dict_reg:
+                colour_sel_reg = st.selectbox("Colour", list(colour_dict_reg.values()), key="reg_colour")
+            else:
+                colour_sel_reg = st.text_input("Colour", key="reg_colour_text")
+
+
+
+        col7, col8 = st.columns(2)
+        with col7:
+            model_photo_dict_reg = regression_label_enc.get("model_photography", {})
+            if model_photo_dict_reg:
+                model_photo_sel_reg = st.selectbox("Model Photography", list(model_photo_dict_reg.values()), key="reg_model_photo")
+            else:
+                model_photo_sel_reg = st.text_input("Model Photography", key="reg_model_photo_text")
+        with col8:
+            price2_dict_reg = regression_label_enc.get("price_2", {})
+            if price2_dict_reg:
+                price2_sel_reg = st.selectbox("Price Compared to Avg", list(price2_dict_reg.values()), key="reg_price2")
+            else:
+                price2_sel_reg = st.text_input("Price Compared to Avg", key="reg_price2_text")
+
+
+        col9, col10 = st.columns(2)
+        with col9:
+            page_dict_reg = regression_label_enc.get("page", {})
+            if page_dict_reg:
+                page_sel_reg = st.selectbox("Page", list(page_dict_reg.values()), key="reg_page")
+            else:
+                page_sel_reg = st.text_input("Page", key="reg_page_text")
+        with col10:
+            is_weekend_reg = st.radio("Is Weekend?", ["Yes", "No"], key="reg_is_weekend")
+
+
+
+        col11, col12 = st.columns(2)
+        with col11:
+            max_page_reached_reg = st.slider("Max Page Reached", 1, 5, 2, key="reg_max_page_reached")
+        with col12:
+            st.write("")
+
+
+
+        if st.button("Estimate Price", disabled=not predict_enabled_reg, key="reg_predict_btn"):
+            try:
+                session_id_val_reg = int(session_id_reg)
+            except:
+                session_id_val_reg = 0
+
+            if country_dict_reg:
+                country_val_reg = label_to_code_strict(country_dict_reg, country_sel_reg, "Country")
+            else:
+                country_val_reg = country_sel_reg
+
+            if page1_dict_reg:
+                page1_val_reg = label_to_code_strict(page1_dict_reg, page1_sel_reg, "Main Product Category")
+            else:
+                page1_val_reg = page1_sel_reg
+
+            if page2_dict_reg:
+                page2_val_reg = label_to_code_strict(page2_dict_reg, page2_sel_reg, "Clothing Model")
+            else:
+                page2_val_reg = page2_sel_reg
+
+            if colour_dict_reg:
+                colour_val_reg = label_to_code_strict(colour_dict_reg, colour_sel_reg, "Colour")
+            else:
+                colour_val_reg = colour_sel_reg
+
+            if model_photo_dict_reg:
+                model_photo_val_reg = label_to_code_strict(model_photo_dict_reg, model_photo_sel_reg, "Model Photography")
+            else:
+                model_photo_val_reg = model_photo_sel_reg
+
+
+            price2_val_reg = price2_manual_map.get(str(price2_sel_reg).lower(), price2_sel_reg)
+            page_val_reg = page_manual_map.get(page_sel_reg, page_sel_reg)
+
+            is_weekend_val_reg = weekend_map[is_weekend_reg]
+            cluster_val_reg = st.session_state.cluster_pred
+
+            X_reg_manual = pd.DataFrame([{
+                'country': country_val_reg,
+                'session_id': session_id_val_reg,
+                'page1_main_category': page1_val_reg,
+                'page2_clothing_model': page2_val_reg,
+                'colour': colour_val_reg,
+                'model_photography': model_photo_val_reg,
+                'price_2': price2_val_reg,
+                'page': page_val_reg,
+                'is_weekend': is_weekend_val_reg,
+                'max_page_reached': max_page_reached_reg,
+                'cluster': cluster_val_reg
+            }])
+
+            X_reg_scaled = scale_subset(regression_scaler, X_reg_manual)
             y_pred_reg = regression_model.predict(X_reg_scaled)
+            st.session_state.reg_price = y_pred_reg[0] 
             st.success(f"Estimated Price: ${y_pred_reg[0]:.2f}")
 
-# =============================================================================
-#                         CSV UPLOAD MODE
-# =============================================================================
+
+    # Tab --> Classification
+
+    with tab_class:
+        st.markdown("### Purchase Prediction...")
+
+        cc_sess, cc_order = st.columns(2)
+        with cc_sess:
+            session_id_class = st.text_input("Session ID", value=st.session_state.session_id if "session_id" in st.session_state else "", key="class_session_id")
+        with cc_order:
+            order_class = st.number_input("Sequence of Clicks (Order)", min_value=1, value=1, key="class_order")
+
+        cluster_val_class = st.text_input(
+            "Customer Segment (Cluster)",
+            value=str(st.session_state.cluster_pred) if "cluster_pred" in st.session_state else "",
+            disabled=True,
+            key="class_cluster"
+        )
+
+        if "cluster_pred" not in st.session_state:
+            st.info("Please run Clustering first.")
+            predict_enabled_class = False
+        else:
+            predict_enabled_class = True
+
+        cc2, cc3 = st.columns(2)
+        with cc2:
+            page1_dict_class = classification_label_enc.get("page_1_main_category", {})
+            if page1_dict_class:
+                page1_sel_class = st.selectbox("Main Product Category", list(page1_dict_class.values()), key="class_page1")
+            else:
+                page1_sel_class = st.text_input("Main Product Category", key="class_page1_text")
+            page2_dict_class = classification_label_enc.get("page2_clothing_model", {})
+            if page2_dict_class:
+                page2_sel_class = st.selectbox("Clothing Model", list(page2_dict_class.keys()), key="class_page2")
+            else:
+                page2_sel_class = st.text_input("Clothing Model", key="class_page2_text")
+        with cc3:
+            location_dict_class = classification_label_enc.get("location", {})
+            if location_dict_class:
+                location_sel_class = st.selectbox("Location", list(location_dict_class.values()), key="class_location")
+            else:
+                location_sel_class = st.text_input("Location", key="class_location_text")
+
+            price_class = st.number_input("Price", min_value=1.0, value=st.session_state.reg_price if "reg_price" in st.session_state else 50.0, format="%.2f", key="class_price")
+
+        cc4, cc5 = st.columns(2)
+        with cc4:
+            price2_dict_class = classification_label_enc.get("price_2", {})
+            if price2_dict_class:
+                price2_sel_class = st.selectbox("Price Compared to Avg", list(price2_dict_class.values()), key="class_price2")
+            else:
+                price2_sel_class = st.text_input("Price Compared to Avg", key="class_price2_text")
+            page_dict_class = classification_label_enc.get("page", {})
+            if page_dict_class:
+                page_sel_class = st.selectbox("Page", list(page_dict_class.values()), key="class_page")
+            else:
+                page_sel_class = st.text_input("Page", key="class_page_text")
+        with cc5:
+            max_page_reached_class = st.slider("Max Page Reached", 1, 5, 2, key="class_max_page")
+
+
+        if st.button("Predict Purchase Conversion", disabled=not predict_enabled_class, key="class_predict_btn"):
+            if page1_dict_class:
+                page1_val_class = label_to_code_strict(page1_dict_class, page1_sel_class, "Main Product Category")
+            else:
+                page1_val_class = page1_sel_class
+
+            if page2_dict_class:
+                page2_val_class = label_to_code_strict(page2_dict_class, page2_sel_class, "Clothing Model")
+            else:
+                page2_val_class = page2_sel_class
+
+            if location_dict_class:
+                location_val_class = label_to_code_strict(location_dict_class, location_sel_class, "Location")
+            else:
+                location_val_class = location_sel_class
+
+            X_class_manual = pd.DataFrame([{
+                'order': order_class,
+                'page1_main_category': page1_val_class,
+                'page2_clothing_model': page2_val_class,
+                'location': location_val_class,
+                'price': price_class,
+                'price_2': price2_sel_class,  
+                'page': page_sel_class,      
+                'max_page_reached': max_page_reached_class,
+                'cluster': st.session_state.cluster_pred
+            }])
+
+
+            X_class_manual["price_2"] = X_class_manual["price_2"].apply(lambda x: price2_manual_map.get(str(x).lower(), x) if isinstance(x, str) else x)
+            X_class_manual["page"] = X_class_manual["page"].apply(lambda x: page_manual_map.get(x, x) if isinstance(x, str) else x)
+
+            X_class_scaled = scale_subset(classification_scaler, X_class_manual)
+            y_pred_class = classification_model.predict(X_class_scaled)
+
+            if y_pred_class[0] == 1:
+                st.success("Purchase will likely to complete")
+            else:
+                st.warning("Purchase will not likely to complete")
+
+# ================================================================================================================================================================
+#                                                                 CSV Upload Mode
+# ================================================================================================================================================================
+
 elif input_mode == "📂 Upload CSV Data":
     st.subheader("Upload Your Bulk Prediction CSV File")
-    uploaded_file = st.file_uploader("📎 Choose a CSV file", type=["csv"])
+
+    uploaded_file = st.file_uploader("📎 Choose a CSV file", type=["csv"], key="bulk_csv_uploader")
+    
     if uploaded_file:
-        with st.spinner("Loading and processing CSV data..."):
-            df = pd.read_csv(uploaded_file)
-            time.sleep(2)  # Simulate processing delay
 
-        # 1) Rename columns if needed
-        rename_map = {}
-        for old_col, new_col in RENAME_DICT.items():
-            if old_col in df.columns:
-                rename_map[old_col] = new_col
-        if rename_map:
-            df.rename(columns=rename_map, inplace=True)
+        file_bytes = uploaded_file.read()
+        original_df = pd.read_csv(io.BytesIO(file_bytes))
+        
+        # Separate BytesIO objects for each pipeline
+        file_clust = io.BytesIO(file_bytes)
+        file_reg = io.BytesIO(file_bytes)
+        file_class = io.BytesIO(file_bytes)
+        
+        with st.spinner("Processing CSV data..."):
+            df_clust = process_bulk_data(file_clust, "clustering")
+            df_reg = process_bulk_data(file_reg, "regression")
+            df_class = process_bulk_data(file_class, "classification")
+            time.sleep(2)
+        
+        if df_clust is None or df_reg is None or df_class is None:
+            st.error("Data processing failed. Please check the logs.")
+        else:
+            # Extract the original session_id from the uploaded file.
+            if "session_id" not in original_df.columns:
+                st.error("No 'session_id' column found in the original CSV. Cannot proceed.")
+                st.stop()
+            original_session_ids = original_df["session_id"].reset_index(drop=True)
+            
+            tab_bulk_clust, tab_bulk_reg, tab_bulk_class = st.tabs(["🔍 Customer Segmentation", "💰 Price Estimation", "🛍️ Purchase Prediction"])
+            
 
-        st.subheader("Data Preview (First Row)")
-        st.write(df.head(1))
+            # Bulk Customer Segmentation ( clustering )
 
-        # Define the columns for classification, regression, clustering
-        CLASSIFICATION_COLS = [
-            'month','order','session_id','page1_main_category','page2_clothing_model',
-            'location','price','page','max_page_reached'
-        ]
-        # For regression, we exclude 'price' because it's our target
-        REGRESSION_COLS = [
-            'country','session_id','page1_main_category','page2_clothing_model',
-            'colour','location','model_photography','price_2','page','is_weekend',
-            'max_page_reached'
-        ]
-        CLUSTERING_COLS = [
-            'month','day','order','country','session_id','page1_main_category',
-            'page2_clothing_model','colour','location','model_photography',
-            'price','price_2','page','is_weekend','season','total_clicks',
-            'max_page_reached'
-        ]
+            with tab_bulk_clust:
+                st.markdown("### Bulk Customer Segmentation")
+                
+                if st.button("Run Bulk Clustering", key="bulk_clustering_btn"):
+                    with st.spinner("Running clustering predictions..."):
+                        cluster_labels = clustering_model.predict(df_clust)
+                        df_clust["cluster"] = cluster_labels
+                        
 
-        tab1, tab2, tab3 = st.tabs(["🛍️ Classification", "💰 Regression", "📊 Clustering"])
+                        clust_result_df = df_clust.copy()
+                        clust_result_df["session_id"] = original_session_ids
+                        
+                        st.success("Bulk Clustering Results:")
+                        st.write(clust_result_df[["session_id", "cluster"]])
+                        
 
-        # ---------------------------------------------------------------------
-        # BULK CLASSIFICATION
-        # ---------------------------------------------------------------------
-        with tab1:
-            st.markdown("### Bulk Classification")
-            if st.button("Run Bulk Classification"):
-                with st.spinner("Running classification predictions..."):
-                    if not set(CLASSIFICATION_COLS).issubset(df.columns):
-                        missing_cols = set(CLASSIFICATION_COLS) - set(df.columns)
-                        st.error(f"CSV is missing classification columns: {missing_cols}")
-                    else:
-                        X_class_bulk = df[CLASSIFICATION_COLS].copy()
-                        # Scale using only the matching columns
-                        X_class_bulk_scaled = scale_subset(classification_scaler, X_class_bulk)
-                        preds = classification_model.predict(X_class_bulk_scaled)
-                        result_class = pd.DataFrame({
-                            "session_id": df["session_id"],
-                            "Prediction": [
-                                "WILL make a purchase" if p == 1 else "will NOT make a purchase"
-                                for p in preds
-                            ]
-                        })
+                        cluster_counts = clust_result_df["cluster"].value_counts().sort_index()
+                        total = cluster_counts.sum()
+
+                        cluster_distribution = {c_label: (count / total) * 100.0 for c_label, count in cluster_counts.items()}
+                        
+                        # Store them in session_state for use in classification later
+                        st.session_state["clust_result_df"] = clust_result_df
+                        st.session_state["cluster_distribution"] = cluster_distribution
+                        
+                        # Plot cluster distribution with percentage annotations on each bar
+                        fig_bar, ax_bar = plt.subplots()
+                        bars = ax_bar.bar(cluster_counts.index.astype(str), cluster_counts.values)
+                        ax_bar.set_xlabel("Customer Segment (Cluster)")
+                        ax_bar.set_ylabel("Count")
+                        dominant_percentage = (cluster_counts.max() / total) * 100
+                        ax_bar.set_title(f"Cluster Distribution: {dominant_percentage:.1f}% of people will likely to buy the product")
+                        
+                        # Annotate each bar with its percentage
+                        for i, bar in enumerate(bars):
+                            height = bar.get_height()
+                            cluster_val = cluster_counts.index[i]
+                            percentage = cluster_distribution[cluster_val]
+                            ax_bar.text( bar.get_x() + bar.get_width() / 2, height, f'{percentage:.1f}%', ha='center', va='bottom')
+                        
+                        st.pyplot(fig_bar)
+
+            
+
+            # Bulk Price Prediction ( Regression )
+ 
+            with tab_bulk_reg:
+                st.markdown("### Bulk Price Estimation")
+                
+                if st.button("Run Bulk Regression", key="bulk_regression_btn"):
+                    with st.spinner("Running regression predictions..."):
+                        X_reg_bulk = df_reg.drop(columns=["price"], errors="ignore")
+                        preds_reg = regression_model.predict(X_reg_bulk)
+                        df_reg["predicted_price"] = preds_reg
+                        
+                        reg_result_df = df_reg.copy()
+                        reg_result_df["session_id"] = original_session_ids
+                        
+                        reg_agg = reg_result_df.groupby("session_id")["predicted_price"].sum().reset_index()
+                        reg_agg["Estimated Price"] = reg_agg["predicted_price"].apply(lambda x: f"${x:.2f}")
+                        reg_agg.drop(columns=["predicted_price"], inplace=True)
+                        
+                        st.success("Bulk Regression Results (Aggregated by Session ID):")
+                        st.write(reg_agg)
+            
+
+            # Bulk Purchase Prediction ( classification )
+
+            with tab_bulk_class:
+                st.markdown("### Bulk Purchase Prediction")
+                
+                if st.button("Run Bulk Classification", key="bulk_classification_btn"):
+                    with st.spinner("Running classification predictions..."):
+                        X_class_bulk = df_class.drop(columns=["purchase_completed", "session_id"], errors="ignore")
+                        preds = classification_model.predict(X_class_bulk)
+                        
+                        class_result_df = pd.DataFrame({"session_id": original_session_ids, "predicted_purchase": preds})
+                        
+                        # Merge in cluster membership from clustering step
+                        clust_result_df = st.session_state["clust_result_df"]
+                        cluster_distribution = st.session_state["cluster_distribution"]
+                        
+                        # Merge on session_id so each row gets its cluster
+                        merged_df = class_result_df.merge(clust_result_df[["session_id", "cluster"]], on="session_id", how="left")
+                        
+                        # For each row, get cluster distribution from dictionary
+                        merged_df["Cluster %"] = merged_df["cluster"].apply(lambda c: cluster_distribution.get(c, 0.0))
+                        
+                        # Define aggregator for repeated session_id rows
+                        def aggregate_predictions(group):
+                            total = len(group)
+                            count_buy = (group["predicted_purchase"] == 1).sum()
+                            prediction = 1 if count_buy >= (total / 2) else 0
+                            percentage_buy = (count_buy / total) * 100
+                            avg_cluster_pct = group["Cluster %"].mean()
+                            
+                            return pd.Series({"Majority Prediction": prediction, "Purchase %": percentage_buy, "Avg Cluster %": avg_cluster_pct})
+                        
+                        agg_results = (merged_df.groupby("session_id").apply(aggregate_predictions).reset_index())
+                        
+                        def format_prediction(row):
+                            if row["Majority Prediction"] == 1:
+                                return f"{row['Avg Cluster %']:.1f}% -> Purchase will likely to complete"
+                            else:
+                                return f"{row['Avg Cluster %']:.1f}% -> Purchase will not likely to complete"
+                        
+                        agg_results["Prediction"] = agg_results.apply(format_prediction, axis=1)
+                        
                         st.success("Bulk Classification Results:")
-                        st.write(result_class)
+                        st.write(agg_results[["session_id", "Prediction"]])
 
-        # ---------------------------------------------------------------------
-        # BULK REGRESSION
-        # ---------------------------------------------------------------------
-        with tab2:
-            st.markdown("### Bulk Regression (Predicting Price)")
-            if st.button("Run Bulk Regression"):
-                with st.spinner("Running regression predictions..."):
-                    if not set(REGRESSION_COLS).issubset(df.columns):
-                        missing_cols = set(REGRESSION_COLS) - set(df.columns)
-                        st.error(f"CSV is missing regression columns: {missing_cols}")
-                    else:
-                        X_reg_bulk = df[REGRESSION_COLS].copy()
-                        # Scale only the columns present
-                        X_reg_bulk_scaled = scale_subset(regression_scaler, X_reg_bulk)
-                        preds_reg = regression_model.predict(X_reg_bulk_scaled)
-                        result_reg = pd.DataFrame({
-                            "session_id": df["session_id"],
-                            "Estimated Price": [f"${pred:.2f}" for pred in preds_reg]
-                        })
-                        st.success("Bulk Regression Results:")
-                        st.write(result_reg)
 
-        # ---------------------------------------------------------------------
-        # BULK CLUSTERING
-        # ---------------------------------------------------------------------
-        with tab3:
-            st.markdown("### Bulk Clustering")
-            if st.button("Run Bulk Clustering"):
-                with st.spinner("Running clustering predictions..."):
-                    if not set(CLUSTERING_COLS).issubset(df.columns):
-                        missing_cols = set(CLUSTERING_COLS) - set(df.columns)
-                        st.error(f"CSV is missing clustering columns: {missing_cols}")
-                    else:
-                        X_clust_bulk = df[CLUSTERING_COLS].copy()
-                        # Scale only the matching columns
-                        X_clust_bulk_scaled = scale_subset(clustering_scaler, X_clust_bulk)
-                        cluster_labels = clustering_model.predict(X_clust_bulk_scaled)
-                        df["Cluster"] = cluster_labels
-                        st.success("Bulk Clustering Results (first 10 rows):")
-                        st.write(df[["session_id", "Cluster"]].head(10))
 
-                        # Simple scatter plot example
-                        fig, ax = plt.subplots()
-                        sns.scatterplot(
-                            x=df["max_page_reached"], 
-                            y=df["total_clicks"], 
-                            hue=df["Cluster"], 
-                            ax=ax
-                        )
-                        ax.set_title("Clustering Visualization")
-                        st.pyplot(fig)
 
-                # ---- Add Pie Chart ----
-                cluster_counts = df["Cluster"].value_counts()
-                fig2, ax2 = plt.subplots()
-                ax2.pie(cluster_counts, labels=cluster_counts.index, autopct="%1.1f%%", startangle=90)
-                ax2.set_title("Cluster Distribution")
-                st.pyplot(fig2)
+
+
