@@ -1,3 +1,4 @@
+import os
 import pickle
 import streamlit as st
 import pandas as pd
@@ -8,8 +9,7 @@ import base64
 import time
 
 # 1) Load the best model names
-
-best_models_csv = "models/best_models/best_models_file.csv"
+best_models_csv = os.path.join("models", "best_models", "best_models_file.csv")
 best_models_df = pd.read_csv(best_models_csv)
 
 class_model_name = best_models_df.loc[best_models_df['Model Type'] == 'classification', 'Best Model'].values[0]
@@ -17,12 +17,10 @@ reg_model_name = best_models_df.loc[best_models_df['Model Type'] == 'regression'
 clust_model_name = best_models_df.loc[best_models_df['Model Type'] == 'clustering', 'Best Model'].values[0]
 clust_model_name = "KMeans"
 
-
 # 2) Load the .pkl models
-
-classification_model_path = f"models/classification_models/{class_model_name}.pkl"
-regression_model_path = f"models/regression_models/{reg_model_name}.pkl"
-clustering_model_path = f"models/clustering_models/{clust_model_name}.pkl"
+classification_model_path = os.path.join("models", "classification_models", f"{class_model_name}.pkl")
+regression_model_path = os.path.join("models", "regression_models", f"{reg_model_name}.pkl")
+clustering_model_path = os.path.join("models", "clustering_models", f"{clust_model_name}.pkl")
 
 with open(classification_model_path, "rb") as f:
     classification_model = pickle.load(f)
@@ -31,26 +29,21 @@ with open(regression_model_path, "rb") as f:
 with open(clustering_model_path, "rb") as f:
     clustering_model = pickle.load(f)
 
-
-# 3) Load seperate encoders
-
-with open("support/classification_encoded_mappings.pkl", "rb") as f:
+# 3) Load separate encoders
+with open(os.path.join("support", "classification_encoded_mappings.pkl"), "rb") as f:
     classification_label_enc = pickle.load(f)
-with open("support/regression_encoded_mappings.pkl", "rb") as f:
+with open(os.path.join("support", "regression_encoded_mappings.pkl"), "rb") as f:
     regression_label_enc = pickle.load(f)
-with open("support/clustering_encoded_mappings.pkl", "rb") as f:
+with open(os.path.join("support", "clustering_encoded_mappings.pkl"), "rb") as f:
     clustering_label_enc = pickle.load(f)
 
-
-# 4) Load seperate standard scalars
-
-with open("support/classification_standard_scaler.pkl", "rb") as f:
+# 4) Load separate standard scalers
+with open(os.path.join("support", "classification_standard_scaler.pkl"), "rb") as f:
     classification_scaler = pickle.load(f)
-with open("support/regression_standard_scaler.pkl", "rb") as f:
+with open(os.path.join("support", "regression_standard_scaler.pkl"), "rb") as f:
     regression_scaler = pickle.load(f)
-with open("support/clustering_standard_scaler.pkl", "rb") as f:
+with open(os.path.join("support", "clustering_standard_scaler.pkl"), "rb") as f:
     clustering_scaler = pickle.load(f)
-
 
 # Helper Functions
 
@@ -87,21 +80,15 @@ def scale_subset(scaler, df_subset):
             transformed[col] = df_subset[col]
     return pd.DataFrame(transformed, index=df_subset.index)
 
-
 # Manual mapping dictionaries for price_2 and page
-
 price2_manual_map = {"yes": 1, "no": 2}
 page_manual_map = {"Page 1": 1, "Page 2": 2, "Page 3": 3, "Page 4": 4, "Page 5": 5}
 
-
 # Mappings for Non-Encoded Fields
-
 weekend_map = {"Yes": 1, "No": 0}
 season_map = {"Autumn": 0, "Summer": 1}
 
-
 # 5) Streamlit setup & background setup
-
 st.set_page_config(page_title="Clickstream Customer Conversion Analysis", layout="wide")
 
 def set_background_in_main_area(image_file):
@@ -123,7 +110,9 @@ def set_background_in_main_area(image_file):
         unsafe_allow_html=True
     )
 
-set_background_in_main_area("images/bg_image.png")
+# Use os.path.join to get the background image path
+bg_image_path = os.path.join("images", "bg_image.png")
+set_background_in_main_area(bg_image_path)
 
 st.markdown(
     """
@@ -136,7 +125,9 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.sidebar.image("images/logo.png", use_column_width=True)
+# Use os.path.join for the sidebar logo
+logo_path = os.path.join("images", "logo.png")
+st.sidebar.image(logo_path, use_column_width=True)
 st.sidebar.title("Customer Conversion Analysis")
 st.sidebar.markdown("**Empowering E-commerce with Data Insights!**")
 
@@ -161,8 +152,7 @@ RENAME_DICT = {
     "page_2_clothing_model": "page2_clothing_model"
 }
 
-
-# 6) Streamlit ui
+# 6) Streamlit UI
 
 input_mode = st.radio("Choose Input Method:", ["🖊️ Manual Input", "📂 Upload CSV Data"], index=0)
 
@@ -173,9 +163,7 @@ if input_mode == "🖊️ Manual Input":
     st.subheader("Enter Customer Details Manually")
     tab_clust, tab_reg, tab_class = st.tabs(["🔍 Customer Segmentation", "💰 Price Estimation", "🛍️ Purchase Prediction"])
 
-
     # Tab --> Clustering
-
     with tab_clust:
         st.markdown("### Customer Segmentation...")
         # Hard-code month=1, day=5 internally
@@ -341,11 +329,9 @@ if input_mode == "🖊️ Manual Input":
             st.session_state.session_id = session_id_val 
             st.success(f"Predicted Customer Segment: {st.session_state.cluster_pred}")
 
-
     # Tab --> Regression
-
     with tab_reg:
-        st.markdown("### Price Estimation...)")
+        st.markdown("### Price Estimation...")
         
         col1, col2 = st.columns(2)
         with col1:
@@ -367,7 +353,6 @@ if input_mode == "🖊️ Manual Input":
         else:
             predict_enabled_reg = True
 
-
         col3, col4 = st.columns(2)
         with col3:
             country_dict_reg = regression_label_enc.get("country", {})
@@ -381,8 +366,6 @@ if input_mode == "🖊️ Manual Input":
                 page1_sel_reg = st.selectbox("Main Product Category", list(page1_dict_reg.values()), key="reg_page1")
             else:
                 page1_sel_reg = st.text_input("Main Product Category", key="reg_page1_text")
-
-
 
         col5, col6 = st.columns(2)
         with col5:
@@ -398,8 +381,6 @@ if input_mode == "🖊️ Manual Input":
             else:
                 colour_sel_reg = st.text_input("Colour", key="reg_colour_text")
 
-
-
         col7, col8 = st.columns(2)
         with col7:
             model_photo_dict_reg = regression_label_enc.get("model_photography", {})
@@ -414,7 +395,6 @@ if input_mode == "🖊️ Manual Input":
             else:
                 price2_sel_reg = st.text_input("Price Compared to Avg", key="reg_price2_text")
 
-
         col9, col10 = st.columns(2)
         with col9:
             page_dict_reg = regression_label_enc.get("page", {})
@@ -425,15 +405,11 @@ if input_mode == "🖊️ Manual Input":
         with col10:
             is_weekend_reg = st.radio("Is Weekend?", ["Yes", "No"], key="reg_is_weekend")
 
-
-
         col11, col12 = st.columns(2)
         with col11:
             max_page_reached_reg = st.slider("Max Page Reached", 1, 5, 2, key="reg_max_page_reached")
         with col12:
             st.write("")
-
-
 
         if st.button("Estimate Price", disabled=not predict_enabled_reg, key="reg_predict_btn"):
             try:
@@ -466,7 +442,6 @@ if input_mode == "🖊️ Manual Input":
             else:
                 model_photo_val_reg = model_photo_sel_reg
 
-
             price2_val_reg = price2_manual_map.get(str(price2_sel_reg).lower(), price2_sel_reg)
             page_val_reg = page_manual_map.get(page_sel_reg, page_sel_reg)
 
@@ -492,9 +467,7 @@ if input_mode == "🖊️ Manual Input":
             st.session_state.reg_price = y_pred_reg[0] 
             st.success(f"Estimated Price: ${y_pred_reg[0]:.2f}")
 
-
     # Tab --> Classification
-
     with tab_class:
         st.markdown("### Purchase Prediction...")
 
@@ -535,7 +508,6 @@ if input_mode == "🖊️ Manual Input":
                 location_sel_class = st.selectbox("Location", list(location_dict_class.values()), key="class_location")
             else:
                 location_sel_class = st.text_input("Location", key="class_location_text")
-
             price_class = st.number_input("Price", min_value=1.0, value=st.session_state.reg_price if "reg_price" in st.session_state else 50.0, format="%.2f", key="class_price")
 
         cc4, cc5 = st.columns(2)
@@ -552,7 +524,6 @@ if input_mode == "🖊️ Manual Input":
                 page_sel_class = st.text_input("Page", key="class_page_text")
         with cc5:
             max_page_reached_class = st.slider("Max Page Reached", 1, 5, 2, key="class_max_page")
-
 
         if st.button("Predict Purchase Conversion", disabled=not predict_enabled_class, key="class_predict_btn"):
             if page1_dict_class:
@@ -582,7 +553,6 @@ if input_mode == "🖊️ Manual Input":
                 'cluster': st.session_state.cluster_pred
             }])
 
-
             X_class_manual["price_2"] = X_class_manual["price_2"].apply(lambda x: price2_manual_map.get(str(x).lower(), x) if isinstance(x, str) else x)
             X_class_manual["page"] = X_class_manual["page"].apply(lambda x: page_manual_map.get(x, x) if isinstance(x, str) else x)
 
@@ -597,14 +567,12 @@ if input_mode == "🖊️ Manual Input":
 # ================================================================================================================================================================
 #                                                                 CSV Upload Mode
 # ================================================================================================================================================================
-
 elif input_mode == "📂 Upload CSV Data":
     st.subheader("Upload Your Bulk Prediction CSV File")
 
     uploaded_file = st.file_uploader("📎 Choose a CSV file", type=["csv"], key="bulk_csv_uploader")
     
     if uploaded_file:
-
         file_bytes = uploaded_file.read()
         original_df = pd.read_csv(io.BytesIO(file_bytes))
         
@@ -630,9 +598,7 @@ elif input_mode == "📂 Upload CSV Data":
             
             tab_bulk_clust, tab_bulk_reg, tab_bulk_class = st.tabs(["🔍 Customer Segmentation", "💰 Price Estimation", "🛍️ Purchase Prediction"])
             
-
             # Bulk Customer Segmentation ( clustering )
-
             with tab_bulk_clust:
                 st.markdown("### Bulk Customer Segmentation")
                 
@@ -641,14 +607,12 @@ elif input_mode == "📂 Upload CSV Data":
                         cluster_labels = clustering_model.predict(df_clust)
                         df_clust["cluster"] = cluster_labels
                         
-
                         clust_result_df = df_clust.copy()
                         clust_result_df["session_id"] = original_session_ids
                         
                         st.success("Bulk Clustering Results:")
                         st.write(clust_result_df[["session_id", "cluster"]])
                         
-
                         cluster_counts = clust_result_df["cluster"].value_counts().sort_index()
                         total = cluster_counts.sum()
 
@@ -671,14 +635,11 @@ elif input_mode == "📂 Upload CSV Data":
                             height = bar.get_height()
                             cluster_val = cluster_counts.index[i]
                             percentage = cluster_distribution[cluster_val]
-                            ax_bar.text( bar.get_x() + bar.get_width() / 2, height, f'{percentage:.1f}%', ha='center', va='bottom')
+                            ax_bar.text(bar.get_x() + bar.get_width() / 2, height, f'{percentage:.1f}%', ha='center', va='bottom')
                         
                         st.pyplot(fig_bar)
 
-            
-
             # Bulk Price Prediction ( Regression )
- 
             with tab_bulk_reg:
                 st.markdown("### Bulk Price Estimation")
                 
@@ -698,9 +659,7 @@ elif input_mode == "📂 Upload CSV Data":
                         st.success("Bulk Regression Results (Aggregated by Session ID):")
                         st.write(reg_agg)
             
-
             # Bulk Purchase Prediction ( classification )
-
             with tab_bulk_class:
                 st.markdown("### Bulk Purchase Prediction")
                 
@@ -728,10 +687,9 @@ elif input_mode == "📂 Upload CSV Data":
                             prediction = 1 if count_buy >= (total / 2) else 0
                             percentage_buy = (count_buy / total) * 100
                             avg_cluster_pct = group["Cluster %"].mean()
-                            
                             return pd.Series({"Majority Prediction": prediction, "Purchase %": percentage_buy, "Avg Cluster %": avg_cluster_pct})
                         
-                        agg_results = (merged_df.groupby("session_id").apply(aggregate_predictions).reset_index())
+                        agg_results = merged_df.groupby("session_id").apply(aggregate_predictions).reset_index()
                         
                         def format_prediction(row):
                             if row["Majority Prediction"] == 1:
@@ -743,9 +701,3 @@ elif input_mode == "📂 Upload CSV Data":
                         
                         st.success("Bulk Classification Results:")
                         st.write(agg_results[["session_id", "Prediction"]])
-
-
-
-
-
-
