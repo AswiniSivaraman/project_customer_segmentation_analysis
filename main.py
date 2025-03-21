@@ -127,7 +127,7 @@ st.markdown(
 
 # Use os.path.join for the sidebar logo
 logo_path = os.path.join("images", "logo.png")
-st.sidebar.image(logo_path, use_column_width=True)
+st.sidebar.image(logo_path, use_container_width =True)
 st.sidebar.title("Customer Conversion Analysis")
 st.sidebar.markdown("**Empowering E-commerce with Data Insights!**")
 
