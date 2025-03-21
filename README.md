@@ -148,4 +148,6 @@ Refer to **`requirements.txt`** for the complete list of dependencies.
 
 ### **"To know more about this project refer `project_document.docx`."**
 
+Deployed this application in **"Streamlit Cloud"** platform. Use this link to access the UI --> https://projectcustomersegmentationanalysis-p5muibk4gfezt4feneevmh.streamlit.app/
+
 
