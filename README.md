@@ -1,4 +1,4 @@
-# Clickstream Customer Conversion Analysis
+# Clickstream Customer Conversion Analysis.
 
 Customer Conversion Analysis for Online Shopping Using Clickstream Data is an end-to-end machine learning project designed to empower e-commerce businesses with actionable insights into customer behavior. Leveraging clickstream data, the project develops a Streamlit web application to predict customer purchase conversion, estimate potential revenue, and segment customers for personalized marketing.
 
